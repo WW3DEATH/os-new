@@ -1,0 +1,6 @@
+{
+  "name": "NebulaOS Desktop Pro",
+  "description": "High-performance modular desktop operating system inspired by macOS for creative workflows, cloud storage, thermal management, and multi-monitor setups.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
