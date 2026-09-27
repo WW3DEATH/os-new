@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useOS } from '../../context/OSContext';
 import { MenuBar } from './MenuBar';
 import { Dock } from './Dock';
@@ -11,6 +11,7 @@ import { NotificationBanner } from './NotificationBanner';
 import { AppId } from '../../types/os';
 import { APP_CATALOG } from '../../utils/appCatalog';
 import { DEFAULT_DESKTOP_APPS, DEFAULT_DOCK_APPS } from '../../services/initialData';
+import { GoogleDriveService } from '../../services/googleDrive';
 import { 
   Monitor, 
   Plus, 
@@ -22,11 +23,14 @@ import {
   Layers, 
   RotateCcw,
   Sparkles,
-  Palette
+  Palette,
+  Upload,
+  HardDrive
 } from 'lucide-react';
 
 export const Desktop: React.FC = () => {
   const { 
+    user,
     isLocked, 
     windows, 
     openApp, 
@@ -38,13 +42,16 @@ export const Desktop: React.FC = () => {
     removeAppFromDesktop,
     addAppToDock,
     removeAppFromDock,
-    resetDockAndDesktopApps
+    resetDockAndDesktopApps,
+    uploadFilesFromComputer
   } = useOS();
 
   // Desktop Context Menu & Modals State
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; type: 'wallpaper' | 'icon'; appId?: AppId } | null>(null);
   const [showManagerModal, setShowManagerModal] = useState<boolean>(false);
   const [hoveredIconId, setHoveredIconId] = useState<AppId | null>(null);
+  const [isDragOverDesktop, setIsDragOverDesktop] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Close context menu on outside click
   useEffect(() => {
@@ -53,13 +60,15 @@ export const Desktop: React.FC = () => {
     return () => window.removeEventListener('click', handleCloseMenu);
   }, []);
 
-  if (isLocked) {
+  // Strict Google OAuth Gate: User MUST be signed in with Google AND possess a valid OAuth token
+  if (isLocked || !user || !GoogleDriveService.isConnected()) {
     return <LockScreen />;
   }
 
   const activeDisplay = displays.find(d => d.id === activeDisplayId) || displays[0];
   const desktopAppIds = settings.desktopApps || DEFAULT_DESKTOP_APPS;
   const dockAppIds = settings.dockApps || DEFAULT_DOCK_APPS;
+  const hasOpenWindows = windows.some(w => w.isOpen && !w.isMinimized);
 
   const handleWallpaperContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -81,9 +90,33 @@ export const Desktop: React.FC = () => {
     });
   };
 
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverDesktop(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverDesktop(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverDesktop(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      uploadFilesFromComputer(e.dataTransfer.files, '/Desktop');
+    }
+  };
+
   return (
     <div 
       onContextMenu={handleWallpaperContextMenu}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
       className={`fixed inset-0 overflow-hidden select-none bg-cover bg-center transition-all duration-500 font-sans ${
         settings.theme === 'dark' ? 'dark' : ''
       }`}
@@ -91,11 +124,37 @@ export const Desktop: React.FC = () => {
         backgroundImage: `url('${settings.wallpaper}')`,
       }}
     >
+      {/* Hidden file input for uploading from computer */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length > 0) {
+            uploadFilesFromComputer(e.target.files, '/Desktop');
+          }
+        }}
+      />
+
+      {/* Drag & Drop Visual Indicator Overlay */}
+      {isDragOverDesktop && (
+        <div className="fixed inset-0 z-50 bg-sky-950/70 backdrop-blur-md flex flex-col items-center justify-center p-8 border-4 border-dashed border-sky-400 pointer-events-none animate-in fade-in">
+          <div className="w-20 h-20 rounded-3xl bg-sky-500 text-white flex items-center justify-center shadow-2xl mb-4 animate-bounce">
+            <Upload className="w-10 h-10" />
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2">Drop files from your computer</h2>
+          <p className="text-sm text-sky-200">Files and images will be imported into Cloud OS and synced with Google Drive</p>
+        </div>
+      )}
+
       {/* Top MenuBar */}
       <MenuBar />
 
       {/* Multi-Monitor Active Screen Indicator Pill (Top Left below menu bar) */}
-      <div className="absolute top-9 left-4 z-10 hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-black/30 backdrop-blur-md border border-white/10 text-white/90 text-[10px] shadow pointer-events-none">
+      <div className={`absolute top-9 left-4 z-0 hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-black/30 backdrop-blur-md border border-white/10 text-white/90 text-[10px] shadow pointer-events-none transition-opacity duration-300 ${
+        hasOpenWindows ? 'opacity-0' : 'opacity-100'
+      }`}>
         <Monitor className="w-3 h-3 text-sky-400" />
         <span className="font-semibold">{activeDisplay.name}</span>
         <span className="opacity-60">• {activeDisplay.refreshRate}</span>
@@ -103,7 +162,9 @@ export const Desktop: React.FC = () => {
       </div>
 
       {/* Dynamic Desktop Icons Grid (Top Right) */}
-      <div className="absolute top-12 right-4 z-10 flex flex-col items-center space-y-3 max-h-[82vh] overflow-y-auto pr-1">
+      <div className={`absolute top-12 right-4 z-0 flex flex-col items-center space-y-3 max-h-[82vh] overflow-y-auto pr-1 transition-all duration-300 ${
+        hasOpenWindows ? 'opacity-0 pointer-events-none scale-95' : 'opacity-100 pointer-events-auto scale-100'
+      }`}>
         {desktopAppIds.map((appId) => {
           const app = APP_CATALOG[appId];
           if (!app) return null;
@@ -175,6 +236,14 @@ export const Desktop: React.FC = () => {
       {/* Notifications Banner Stack */}
       <NotificationBanner />
 
+      {/* Hardware Display Brightness Overlay (Real screen dimming / brightening) */}
+      <div 
+        className="fixed inset-0 pointer-events-none transition-opacity duration-150 z-[9999] bg-black"
+        style={{
+          opacity: Math.max(0, Math.min(0.85, (100 - (settings.brightness ?? 100)) / 100 * 0.85))
+        }}
+      />
+
       {/* Wallpaper & Desktop Icon Right-Click Context Menu */}
       {contextMenu && (
         <div
@@ -244,6 +313,19 @@ export const Desktop: React.FC = () => {
               <div className="px-3 py-1 font-bold border-b border-white/10 text-neutral-400 text-[10px] uppercase tracking-wider">
                 Desktop Options
               </div>
+
+              <button
+                onClick={() => {
+                  fileInputRef.current?.click();
+                  setContextMenu(null);
+                }}
+                className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/10 transition-colors flex items-center justify-between font-medium text-emerald-400"
+              >
+                <div className="flex items-center gap-2">
+                  <Upload className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Upload Files from Computer...</span>
+                </div>
+              </button>
 
               <button
                 onClick={() => {

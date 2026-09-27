@@ -106,6 +106,26 @@ export const CreativeStudioApp: React.FC = () => {
     }, 400);
   };
 
+  const handleExportToDevice = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = canvas.width || 800;
+    exportCanvas.height = canvas.height || 600;
+    const ctx = exportCanvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = settings.theme === 'dark' ? '#0f172a' : '#f8fafc';
+      ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+      ctx.drawImage(canvas, 0, 0);
+    }
+    const dataUrl = exportCanvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = `Creative_Studio_Artwork_${Date.now()}.png`;
+    a.click();
+    notify('Artwork Exported', `Downloaded ${a.download} to your computer.`, 'render');
+  };
+
   return (
     <div className={`h-full flex flex-col select-none text-xs ${settings.theme === 'dark' ? 'text-neutral-200' : 'text-neutral-800'}`}>
       {/* Top Studio Toolbar */}
@@ -169,6 +189,16 @@ export const CreativeStudioApp: React.FC = () => {
             <option value={256}>256 Samples</option>
             <option value={1024}>1024 Raytrace Passes</option>
           </select>
+
+          {/* Export to your device button */}
+          <button
+            onClick={handleExportToDevice}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white font-semibold transition-all active:scale-95 text-xs shadow-sm"
+            title="Export your artwork directly to your device (PC)"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export to your device</span>
+          </button>
 
           {/* Render Button */}
           <button

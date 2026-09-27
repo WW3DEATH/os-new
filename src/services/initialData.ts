@@ -336,4 +336,6 @@ export const DEFAULT_SETTINGS: OsSettings = {
   offlineSyncEnabled: true,
   dockApps: DEFAULT_DOCK_APPS,
   desktopApps: DEFAULT_DESKTOP_APPS,
+  volume: 85,
+  brightness: 100,
 };

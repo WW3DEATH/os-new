@@ -27,6 +27,7 @@ import {
   CloudSyncService, 
   UserProfile 
 } from '../services/firebase';
+import { GoogleDriveService, DEDICATED_DRIVE_FOLDER_NAME } from '../services/googleDrive';
 import { onAuthStateChanged } from 'firebase/auth';
 import { sounds } from '../utils/sound';
 
@@ -43,7 +44,6 @@ interface OSContextType {
   isLocked: boolean;
   setLocked: (locked: boolean) => void;
   loginWithGoogle: () => Promise<void>;
-  loginAsGuest: () => void;
   logout: () => Promise<void>;
   
   // Windows
@@ -81,6 +81,7 @@ interface OSContextType {
   createFile: (file: Omit<FileItem, 'id' | 'updatedAt'>) => void;
   updateFile: (id: string, updates: Partial<FileItem>) => void;
   deleteFile: (id: string) => void;
+  uploadFilesFromComputer: (fileList: FileList | File[], targetFolder?: string) => Promise<FileItem[]>;
   
   // Settings & Theme
   settings: OsSettings;
@@ -139,16 +140,26 @@ const APP_METADATA: Record<AppId, { title: string; icon: string; width: number; 
 };
 
 export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Authentication & Lock Screen
+  // Authentication & Lock Screen - STRICT GOOGLE SIGN-IN ONLY, NO BYPASS
   const [user, setUser] = useState<UserProfile | null>(() => {
     try {
       const saved = localStorage.getItem('nebula_os_user');
-      return saved ? JSON.parse(saved) : null;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.email && !parsed.isGuest && parsed.uid !== 'creative-producer-lead') {
+          return parsed;
+        }
+      }
     } catch {
-      return null;
+      // Fallback
     }
+    return null;
   });
-  const [isLocked, setLocked] = useState<boolean>(() => !user);
+
+  // Workstation opens locked behind login screen overlay until user authenticates with Google OAuth
+  const [isLocked, setLocked] = useState<boolean>(() => {
+    return !GoogleDriveService.isConnected();
+  });
 
   // System Settings
   const [settings, setSettings] = useState<OsSettings>(() => {
@@ -159,7 +170,10 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   // Sound Engine
   useEffect(() => {
     sounds.enabled = settings.soundEffects;
-  }, [settings.soundEffects]);
+    if (settings.volume !== undefined) {
+      sounds.setVolume(settings.volume);
+    }
+  }, [settings.soundEffects, settings.volume]);
 
   // Sync dark/light theme class on documentElement
   useEffect(() => {
@@ -202,28 +216,9 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     activeTasks: DEFAULT_RENDER_TASKS,
   });
 
-  // Windows State
-  const [windows, setWindows] = useState<WindowState[]>([
-    {
-      id: 'win-finder-init',
-      appId: 'finder',
-      title: 'Finder',
-      icon: 'folder',
-      isOpen: true,
-      isMinimized: false,
-      isMaximized: false,
-      zIndex: 10,
-      x: 120,
-      y: 70,
-      width: 920,
-      height: 580,
-      minWidth: 640,
-      minHeight: 400,
-      displayId: 'display-1',
-      spaceId: 1,
-    }
-  ]);
-  const [activeWindowId, setActiveWindowId] = useState<string | null>('win-finder-init');
+  // Windows State - starts clean with zero cluttered windows
+  const [windows, setWindows] = useState<WindowState[]>([]);
+  const [activeWindowId, setActiveWindowId] = useState<string | null>(null);
 
   // UI Panels
   const [spotlightOpen, setSpotlightOpen] = useState(false);
@@ -234,8 +229,8 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   const [notifications, setNotifications] = useState<OsNotification[]>([
     {
       id: 'notif-welcome',
-      title: 'NebulaOS Creative Suite',
-      message: 'Hardware acceleration & P3 Color Calibration active.',
+      title: 'NebulaOS Cloud Workstation',
+      message: 'Ready for creative workflow. Sign in with Google to synchronize your personal Google Drive.',
       type: 'info',
       timestamp: 'Just now',
     }
@@ -244,22 +239,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   // Cloud Sync
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline' | 'error'>('synced');
   const [lastBackupTime, setLastBackupTime] = useState<string>('Just now');
-  const [teamPresence, setTeamPresence] = useState<TeamMember[]>([
-    {
-      id: 'member-1',
-      name: 'Maya Chen (Art Director)',
-      avatarColor: 'bg-emerald-500',
-      activeApp: 'Creative Studio',
-      lastSeen: Date.now(),
-    },
-    {
-      id: 'member-2',
-      name: 'Alex Vance (VFX Lead)',
-      avatarColor: 'bg-indigo-500',
-      activeApp: 'Activity Monitor',
-      lastSeen: Date.now() - 15000,
-    }
-  ]);
+  const [teamPresence, setTeamPresence] = useState<TeamMember[]>([]);
 
   // Notification trigger
   const notify = useCallback((title: string, message: string, type: OsNotification['type'] = 'info') => {
@@ -284,14 +264,23 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       if (fbUser) {
         const profile: UserProfile = {
           uid: fbUser.uid,
-          displayName: fbUser.displayName || 'Creative Producer',
-          email: fbUser.email || 'user@nebulaos.pro',
+          displayName: fbUser.displayName || fbUser.email?.split('@')[0] || 'Google User',
+          email: fbUser.email || '',
           photoURL: fbUser.photoURL || undefined,
           isGuest: false,
         };
         setUser(profile);
         localStorage.setItem('nebula_os_user', JSON.stringify(profile));
-        setLocked(false);
+
+        // Require active Google OAuth token before unlocking OS
+        if (GoogleDriveService.isConnected()) {
+          setLocked(false);
+        } else {
+          setLocked(true);
+        }
+      } else {
+        setUser(null);
+        setLocked(true);
       }
     });
 
@@ -312,35 +301,19 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     };
   }, []);
 
-  // Login Handlers
+  // Login Handlers - Strict Google Sign-In ONLY
   const loginWithGoogle = async () => {
     try {
       setSyncStatus('syncing');
       const profile = await signInWithGoogle();
       setUser(profile);
       setLocked(false);
-      notify('Google Account Connected', `Welcome back, ${profile.displayName}! Google Drive synced.`, 'sync');
+      notify('Google Account Connected', `Welcome, ${profile.displayName}! Private Drive folder '${profile.driveFolder?.name || DEDICATED_DRIVE_FOLDER_NAME}' connected.`, 'sync');
       setSyncStatus('synced');
     } catch (err: any) {
-      console.warn('Google sign-in popup failed, offering guest fallback:', err);
-      // If popup was blocked or iframe restriction occurred, provide clear message
-      notify('Sign-In Notice', 'You can also continue seamlessly as Guest Creative via the bypass button.', 'warning');
+      console.warn('Google sign-in error:', err);
       throw err;
     }
-  };
-
-  const loginAsGuest = () => {
-    const guestUser: UserProfile = {
-      uid: `guest-${Date.now()}`,
-      displayName: 'Guest Creative',
-      email: 'guest@studio.local',
-      isGuest: true,
-    };
-    setUser(guestUser);
-    localStorage.setItem('nebula_os_user', JSON.stringify(guestUser));
-    setLocked(false);
-    sounds.playPop();
-    notify('Guest Studio Mode', 'Running with full local offline persistence & thermal engine.', 'info');
   };
 
   const logout = async () => {
@@ -348,6 +321,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     setUser(null);
     setLocked(true);
     sounds.playPop();
+    notify('Signed Out', 'Signed out from your Google account.', 'info');
   };
 
   // Hardware Thermal Simulation Loop: Real-time dynamic simulation based on active rendering tasks
@@ -643,6 +617,70 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     notify('Moved to Trash', 'File moved to system trash.', 'info');
   }, [notify, queueCloudBackup]);
 
+  // Upload Files & Images directly from local computer / laptop
+  const uploadFilesFromComputer = useCallback(async (fileList: FileList | File[], targetFolder: string = '/Project Assets'): Promise<FileItem[]> => {
+    const list = Array.from(fileList);
+    if (list.length === 0) return [];
+
+    const uploadedItems: FileItem[] = [];
+
+    for (const file of list) {
+      const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+      let type: FileItem['type'] = 'document';
+      if (['.png', '.jpg', '.jpeg', '.webp', '.svg', '.gif', '.bmp', '.exr'].includes(ext) || file.type.startsWith('image/')) {
+        type = 'image';
+      } else if (['.xlsx', '.xls', '.sheet', '.csv'].includes(ext)) {
+        type = 'spreadsheet';
+      } else if (['.pptx', '.key', '.ppt'].includes(ext)) {
+        type = 'presentation';
+      } else if (['.blend', '.obj', '.fbx', '.gltf', '.glb', '.stl'].includes(ext)) {
+        type = '3d_model';
+      } else if (['.wav', '.mp3', '.m4a', '.ogg', '.flac'].includes(ext) || file.type.startsWith('audio/')) {
+        type = 'audio';
+      } else if (['.mp4', '.mov', '.webm', '.mkv'].includes(ext) || file.type.startsWith('video/')) {
+        type = 'video';
+      } else if (['.ts', '.tsx', '.js', '.jsx', '.json', '.html', '.css', '.py', '.glsl', '.sh', '.md', '.txt'].includes(ext)) {
+        type = 'code';
+      }
+
+      const content = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        if (type === 'image' || type === 'audio' || type === 'video' || type === '3d_model') {
+          reader.readAsDataURL(file);
+        } else {
+          reader.readAsText(file);
+        }
+        reader.onload = () => resolve((reader.result as string) || '');
+        reader.onerror = () => resolve('');
+      });
+
+      const formattedSize = file.size > 1024 * 1024 
+        ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` 
+        : `${Math.max(1, Math.round(file.size / 1024))} KB`;
+
+      const newFile: FileItem = {
+        id: `file-upload-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        name: file.name,
+        path: `${targetFolder.replace(/\/$/, '')}/${file.name}`,
+        type,
+        size: formattedSize,
+        content,
+        updatedAt: 'Just now',
+        tags: ['uploaded', 'laptop', type],
+        isCloudSynced: true,
+        isOfflineAvailable: true
+      };
+
+      uploadedItems.push(newFile);
+    }
+
+    setFiles(prev => [...uploadedItems, ...prev]);
+    queueCloudBackup();
+    sounds.playPop();
+    notify('Uploaded from Laptop', `${uploadedItems.length} file${uploadedItems.length > 1 ? 's' : ''} uploaded to Cloud OS.`, 'sync');
+    return uploadedItems;
+  }, [notify, queueCloudBackup]);
+
   // Settings
   const updateSettings = useCallback((updates: Partial<OsSettings>) => {
     setSettings(prev => {
@@ -777,7 +815,6 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         isLocked,
         setLocked,
         loginWithGoogle,
-        loginAsGuest,
         logout,
         windows,
         activeWindowId,
@@ -805,6 +842,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         createFile,
         updateFile,
         deleteFile,
+        uploadFilesFromComputer,
         settings,
         updateSettings,
         toggleTheme,

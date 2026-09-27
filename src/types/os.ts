@@ -111,6 +111,8 @@ export interface OsSettings {
   offlineSyncEnabled: boolean;
   dockApps?: AppId[];
   desktopApps?: AppId[];
+  volume?: number;      // 0 to 100, master audio volume
+  brightness?: number;  // 20 to 100, display brightness
 }
 
 export interface TeamMember {

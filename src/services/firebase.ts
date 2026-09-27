@@ -11,9 +11,7 @@ import {
   getFirestore, 
   doc, 
   setDoc, 
-  getDoc, 
-  collection, 
-  onSnapshot 
+  getDoc 
 } from 'firebase/firestore';
 import { 
   getDatabase, 
@@ -22,16 +20,17 @@ import {
   onValue, 
   serverTimestamp as rtdbServerTimestamp 
 } from 'firebase/database';
+import firebaseAppletConfig from '../../firebase-applet-config.json';
+import { GoogleDriveService, GoogleDriveFolder, DEDICATED_DRIVE_FOLDER_NAME } from './googleDrive';
 
 export const firebaseConfig = {
-  apiKey: "AIzaSyCDGv7Bk7_OFNzAiANO7ECXsdHc1-3fkBY",
-  authDomain: "cloud-os-6a14c.firebaseapp.com",
-  databaseURL: "https://cloud-os-6a14c-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "cloud-os-6a14c",
-  storageBucket: "cloud-os-6a14c.firebasestorage.app",
-  messagingSenderId: "29564180792",
-  appId: "1:29564180792:web:41163ebdb09b05cf1a09cd",
-  measurementId: "G-3659MX2KLK"
+  apiKey: firebaseAppletConfig.apiKey || "AIzaSyBO0asfdvUv8BqsoFNEb-SM-o1CrIKyBgw",
+  authDomain: firebaseAppletConfig.authDomain || "gen-lang-client-0137150734.firebaseapp.com",
+  projectId: firebaseAppletConfig.projectId || "gen-lang-client-0137150734",
+  storageBucket: firebaseAppletConfig.storageBucket || "gen-lang-client-0137150734.firebasestorage.app",
+  messagingSenderId: firebaseAppletConfig.messagingSenderId || "778138590254",
+  appId: firebaseAppletConfig.appId || "1:778138590254:web:251568112d52b3bec1d3bf",
+  databaseURL: (firebaseAppletConfig as any).databaseURL || `https://cloud-os-6a14c-default-rtdb.asia-southeast1.firebasedatabase.app`
 };
 
 // Initialize Firebase safely
@@ -39,8 +38,14 @@ const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const rtdb = getDatabase(app);
+
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('https://www.googleapis.com/auth/userinfo.profile');
+googleProvider.addScope('https://www.googleapis.com/auth/userinfo.email');
 googleProvider.addScope('https://www.googleapis.com/auth/drive.file');
+googleProvider.setCustomParameters({
+  prompt: 'select_account'
+});
 
 export interface UserProfile {
   uid: string;
@@ -48,25 +53,83 @@ export interface UserProfile {
   email: string;
   photoURL?: string;
   isGuest?: boolean;
+  driveFolder?: GoogleDriveFolder;
 }
 
-// Google Sign-In with fallback helper
+// Google Sign-In with OAuth token capture and Private Google Drive folder configuration
 export async function signInWithGoogle(): Promise<UserProfile> {
   try {
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
+    
+    // Capture user's specific Google OAuth Access Token
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    const accessToken = credential?.accessToken;
+    if (!accessToken) {
+      throw new Error('Google OAuth access token was not returned. Please grant access in the sign-in popup.');
+    }
+
+    // Cache the OAuth access token in-memory in GoogleDriveService
+    GoogleDriveService.setToken(accessToken);
+
+    // Retrieve or provision the user's dedicated private Google Drive folder ('NebulaOS Workstation')
+    let privateFolder: GoogleDriveFolder | undefined = undefined;
+    try {
+      privateFolder = await GoogleDriveService.getOrCreatePrivateFolder();
+    } catch (driveErr) {
+      console.warn('Could not auto-create Google Drive private folder at sign-in:', driveErr);
+      privateFolder = {
+        id: '',
+        name: DEDICATED_DRIVE_FOLDER_NAME,
+        webViewLink: 'https://drive.google.com'
+      };
+    }
+
     const profile: UserProfile = {
       uid: user.uid,
-      displayName: user.displayName || 'Creative Producer',
-      email: user.email || 'user@nebulaos.pro',
+      displayName: user.displayName || user.email?.split('@')[0] || 'Google User',
+      email: user.email || '',
       photoURL: user.photoURL || undefined,
       isGuest: false,
+      driveFolder: privateFolder
     };
-    // Sync user session to local storage for offline readiness
+
+    // Sync user profile & Google Drive private folder metadata to Firebase Firestore
+    try {
+      const userDocRef = doc(db, 'workspaces', user.uid);
+      await setDoc(userDocRef, {
+        userEmail: user.email,
+        userDisplayName: profile.displayName,
+        photoURL: profile.photoURL || null,
+        lastLogin: new Date().toISOString(),
+        googleDriveFolder: privateFolder ? {
+          id: privateFolder.id,
+          name: privateFolder.name,
+          webViewLink: privateFolder.webViewLink,
+          updatedAt: new Date().toISOString()
+        } : null
+      }, { merge: true });
+    } catch (e) {
+      console.warn('Firestore user profile sync notice:', e);
+    }
+
+    // Also mirror to Realtime Database if available
+    try {
+      const userRtdbRef = ref(rtdb, `users/${user.uid}/driveFolder`);
+      await rtdbSet(userRtdbRef, {
+        folderId: privateFolder?.id || '',
+        folderName: privateFolder?.name || DEDICATED_DRIVE_FOLDER_NAME,
+        webViewLink: privateFolder?.webViewLink || '',
+        lastConnected: new Date().toISOString()
+      });
+    } catch (e) {
+      // RTDB optional fallback
+    }
+
     localStorage.setItem('nebula_os_user', JSON.stringify(profile));
     return profile;
   } catch (error: any) {
-    console.warn('Firebase popup sign-in encountered error, checking if user canceled or popup blocked:', error);
+    console.warn('Google sign-in encountered an issue:', error);
     throw error;
   }
 }
@@ -77,10 +140,12 @@ export async function signOutUser() {
   } catch (err) {
     console.error('Sign out error', err);
   }
+  GoogleDriveService.setToken(null);
+  GoogleDriveService.clearPrivateFolder();
   localStorage.removeItem('nebula_os_user');
 }
 
-// Cloud Backup & Offline Synchronization Engine
+// Cloud Backup & Realtime Database Synchronization Engine
 export class CloudSyncService {
   private static localKey = 'nebula_os_storage_v1';
 
@@ -105,23 +170,13 @@ export class CloudSyncService {
   static async backupToCloud(uid: string, state: any): Promise<boolean> {
     this.saveLocal(state);
     if (!uid || uid.startsWith('guest-')) {
-      return true; // Saved locally for guests
+      return true;
     }
 
-    try {
-      // 1. Save to Realtime Database for instant collaboration & live state
-      const userRef = ref(rtdb, `users/${uid}/workspace`);
-      await rtdbSet(userRef, {
-        updatedAt: rtdbServerTimestamp(),
-        stateSummary: {
-          filesCount: state.files?.length || 0,
-          settings: state.settings || {},
-          openWindows: (state.windows || []).map((w: any) => w.title),
-        },
-        cloudData: JSON.stringify(state)
-      });
+    const driveFolder = GoogleDriveService.getPrivateFolder();
 
-      // 2. Also mirror to Firestore for structured persistence
+    try {
+      // 1. Mirror to Firestore for persistent document history
       const userDocRef = doc(db, 'workspaces', uid);
       await setDoc(userDocRef, {
         lastSynced: new Date().toISOString(),
@@ -129,11 +184,41 @@ export class CloudSyncService {
         files: state.files || [],
         shortcuts: state.shortcuts || {},
         notes: state.notes || [],
+        googleDriveFolder: driveFolder ? {
+          id: driveFolder.id,
+          name: driveFolder.name,
+          webViewLink: driveFolder.webViewLink,
+          syncedAt: new Date().toISOString()
+        } : null
       }, { merge: true });
+
+      // 2. Save to Realtime Database for live cross-device sync & instant updates
+      try {
+        const userRef = ref(rtdb, `users/${uid}/workspace`);
+        await rtdbSet(userRef, {
+          updatedAt: rtdbServerTimestamp(),
+          lastActive: new Date().toISOString(),
+          stateSummary: {
+            filesCount: state.files?.length || 0,
+            settings: state.settings || {},
+            openWindows: (state.windows || []).map((w: any) => w.title),
+            googleDriveFolderName: driveFolder?.name || DEDICATED_DRIVE_FOLDER_NAME
+          },
+          cloudData: JSON.stringify(state)
+        });
+
+        const filesRef = ref(rtdb, `users/${uid}/files`);
+        await rtdbSet(filesRef, {
+          updatedAt: rtdbServerTimestamp(),
+          items: state.files || []
+        });
+      } catch (rtdbErr) {
+        // RTDB mirror is non-blocking
+      }
 
       return true;
     } catch (err) {
-      console.warn('Cloud sync error (will continue offline):', err);
+      console.warn('Cloud sync error (persisted locally):', err);
       return false;
     }
   }
@@ -160,6 +245,27 @@ export class CloudSyncService {
     }
 
     return local;
+  }
+
+  // Listen to realtime database updates for the logged in user
+  static subscribeToRealtimeWorkspace(uid: string, onUpdate: (data: any) => void) {
+    if (!uid || uid.startsWith('guest-')) return () => {};
+    try {
+      const userRef = ref(rtdb, `users/${uid}/workspace`);
+      return onValue(userRef, (snapshot) => {
+        const val = snapshot.val();
+        if (val?.cloudData) {
+          try {
+            const parsed = JSON.parse(val.cloudData);
+            onUpdate(parsed);
+          } catch (e) {
+            console.warn('Failed parsing realtime workspace data:', e);
+          }
+        }
+      });
+    } catch (err) {
+      return () => {};
+    }
   }
 
   // Real-time team collaboration presence

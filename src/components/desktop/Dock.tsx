@@ -31,7 +31,27 @@ export const Dock: React.FC = () => {
   const [hoveredApp, setHoveredApp] = useState<AppId | 'trash' | 'mission' | 'add' | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; appId: AppId } | null>(null);
   const [showAddMenu, setShowAddMenu] = useState<boolean>(false);
+  const [isDockHovered, setIsDockHovered] = useState<boolean>(false);
   const addMenuRef = useRef<HTMLDivElement>(null);
+
+  const hasOpenWindows = windows.some(w => w.isOpen && !w.isMinimized);
+
+  // Auto-hide mouse move detection: reveal when cursor moves to the bottom edge
+  useEffect(() => {
+    if (!hasOpenWindows) {
+      setIsDockHovered(false);
+      return;
+    }
+    const handleMouseMove = (e: MouseEvent) => {
+      if (window.innerHeight - e.clientY <= 40) {
+        setIsDockHovered(true);
+      } else if (window.innerHeight - e.clientY > 120) {
+        setIsDockHovered(false);
+      }
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, [hasOpenWindows]);
 
   // Close context menu and add menu on outside click
   useEffect(() => {
@@ -68,7 +88,27 @@ export const Dock: React.FC = () => {
 
   return (
     <>
-      <div className="fixed bottom-2 left-1/2 -translate-x-1/2 z-40 flex items-end">
+      {/* Bottom screen hover trigger zone when dock is hidden */}
+      {hasOpenWindows && (
+        <div 
+          onMouseEnter={() => setIsDockHovered(true)}
+          className="fixed bottom-0 left-0 right-0 h-4 z-30 cursor-default"
+        />
+      )}
+
+      <div 
+        onMouseEnter={() => setIsDockHovered(true)}
+        onMouseLeave={() => {
+          if (hasOpenWindows) setIsDockHovered(false);
+        }}
+        className={`fixed bottom-2 left-1/2 -translate-x-1/2 z-40 flex items-end transition-all duration-300 ease-out ${
+          hasOpenWindows
+            ? isDockHovered
+              ? 'translate-y-0 opacity-100 pointer-events-auto shadow-2xl'
+              : 'translate-y-28 opacity-0 pointer-events-none'
+            : 'translate-y-0 opacity-100 pointer-events-auto'
+        }`}
+      >
         <nav 
           className={`px-3 py-2 rounded-2xl flex items-end space-x-2 backdrop-blur-2xl border transition-all duration-200 shadow-2xl ${
             settings.theme === 'dark' 

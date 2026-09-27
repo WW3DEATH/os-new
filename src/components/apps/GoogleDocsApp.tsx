@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useOS } from '../../context/OSContext';
+import { GoogleDriveService } from '../../services/googleDrive';
 import { 
   FileText, 
   Bold, 
@@ -15,28 +16,40 @@ import {
   Code, 
   Save, 
   Download, 
-  Share2, 
-  Users, 
   Check,
-  Printer,
-  FolderOpen,
+  FolderOpen, 
   Plus,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
-  AlignJustify,
-  Search,
-  Replace,
-  Table as TableIcon,
-  Image as ImageIcon,
-  Link as LinkIcon,
-  CheckSquare,
-  Sparkles,
-  Palette,
-  X,
-  FilePlus,
-  Layout
+  Search, 
+  Replace, 
+  Table as TableIcon, 
+  Image as ImageIcon, 
+  CheckSquare, 
+  X, 
+  FilePlus, 
+  Layout,
+  Upload,
+  RotateCw,
+  Sliders,
+  Trash2,
+  HardDrive,
+  User,
+  SlidersHorizontal,
+  Maximize2
 } from 'lucide-react';
+
+export interface DocImage {
+  id: string;
+  name: string;
+  url: string;
+  caption: string;
+  size: 'sm' | 'md' | 'lg' | 'full';
+  align: 'left' | 'center' | 'right';
+  brightness: number; // 50 to 150
+  contrast: number; // 50 to 150
+  rotation: number; // 0, 90, 180, 270
+  filter: 'none' | 'grayscale' | 'sepia' | 'invert' | 'blur' | 'warm' | 'cool';
+  borderRadius: 'none' | 'rounded' | 'circle';
+}
 
 interface GoogleDocsAppProps {
   initialFileId?: string;
@@ -49,14 +62,22 @@ export const GoogleDocsApp: React.FC<GoogleDocsAppProps> = ({
   initialContent, 
   initialFileName 
 }) => {
-  const { files, updateFile, createFile, teamPresence, settings, notify } = useOS();
+  const { files, updateFile, createFile, user, settings, notify } = useOS();
 
-  // Find active file or default
-  const docFile = files.find(f => f.id === initialFileId) || files.find(f => f.type === 'document');
-  const [fileId, setFileId] = useState<string>(docFile?.id || 'new-doc');
-  const [title, setTitle] = useState<string>(initialFileName || docFile?.name || 'Creative Production Architecture.docx');
-  const [content, setContent] = useState<string>(initialContent || docFile?.content || `# Project NebulaOS: Creative Pipeline Architecture\n\nHigh-performance unified document workspace running directly in the browser with Google Drive cloud synchronization.\n\n## 1. Executive Summary\nNebulaOS optimizes multi-threaded render workflows, offering hardware-level thermal profiles and sub-second asset editing for digital producers.\n\n### Key Deliverables\n- [x] Zero-latency word processing with rich formatting\n- [x] High-precision spreadsheets with formula calculation\n- [x] Presentation decks with 3D transitions and animations\n- [ ] Final 4K ACES export signoff\n\n> "Simplicity is the ultimate sophistication." — Leonardo da Vinci\n\nContact the core engineering team for full pipeline specs.`);
+  // Fresh new document by default unless a specific file was opened
+  const activeFile = initialFileId ? files.find(f => f.id === initialFileId) : null;
+  const [fileId, setFileId] = useState<string>(activeFile?.id || `doc-${Date.now()}`);
+  const [title, setTitle] = useState<string>(initialFileName || activeFile?.name || 'Untitled Document.docx');
+  const [content, setContent] = useState<string>(initialContent || activeFile?.content || '');
   const [isSaved, setIsSaved] = useState<boolean>(true);
+
+  // Document Images State
+  const [images, setImages] = useState<DocImage[]>([]);
+  const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
+  const [showImageModal, setShowImageModal] = useState<boolean>(false);
+  const [imageUrlInput, setImageUrlInput] = useState<string>('');
+  const [imageCaptionInput, setImageCaptionInput] = useState<string>('');
+  const imageUploadRef = useRef<HTMLInputElement>(null);
 
   // Formatting state
   const [fontFamily, setFontFamily] = useState<'sans' | 'serif' | 'mono'>('sans');
@@ -73,7 +94,7 @@ export const GoogleDocsApp: React.FC<GoogleDocsAppProps> = ({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Switch or reload when initialFileId changes
+  // Reload when initialFileId changes
   useEffect(() => {
     if (initialFileId) {
       const f = files.find(item => item.id === initialFileId);
@@ -92,7 +113,86 @@ export const GoogleDocsApp: React.FC<GoogleDocsAppProps> = ({
     setIsSaved(false);
   };
 
-  const handleSave = () => {
+  // Upload image from laptop / computer
+  const handleUploadImageFromLaptop = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      notify('Invalid File', 'Please upload a valid image file (PNG, JPG, SVG, WEBP).', 'warning');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        const newImg: DocImage = {
+          id: `img-${Date.now()}`,
+          name: file.name,
+          url: event.target.result as string,
+          caption: file.name.replace(/\.[^/.]+$/, ""),
+          size: 'md',
+          align: 'center',
+          brightness: 100,
+          contrast: 100,
+          rotation: 0,
+          filter: 'none',
+          borderRadius: 'rounded'
+        };
+
+        setImages(prev => [...prev, newImg]);
+        setSelectedImageId(newImg.id);
+        setIsSaved(false);
+        notify('Image Added', `"${file.name}" added to document. Click image to edit properties.`, 'info');
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+    setShowImageModal(false);
+  };
+
+  // Insert image via URL
+  const handleAddImageFromUrl = () => {
+    if (!imageUrlInput.trim()) return;
+    const newImg: DocImage = {
+      id: `img-${Date.now()}`,
+      name: 'Web Image',
+      url: imageUrlInput.trim(),
+      caption: imageCaptionInput.trim() || 'Imported Graphic',
+      size: 'md',
+      align: 'center',
+      brightness: 100,
+      contrast: 100,
+      rotation: 0,
+      filter: 'none',
+      borderRadius: 'rounded'
+    };
+    setImages(prev => [...prev, newImg]);
+    setSelectedImageId(newImg.id);
+    setImageUrlInput('');
+    setImageCaptionInput('');
+    setShowImageModal(false);
+    setIsSaved(false);
+    notify('Image Inserted', 'Image linked into document.', 'info');
+  };
+
+  // Update image attributes
+  const handleUpdateImage = (imgId: string, updates: Partial<DocImage>) => {
+    setImages(prev => prev.map(img => img.id === imgId ? { ...img, ...updates } : img));
+    setIsSaved(false);
+  };
+
+  // Remove image
+  const handleDeleteImage = (imgId: string) => {
+    setImages(prev => prev.filter(img => img.id !== imgId));
+    if (selectedImageId === imgId) setSelectedImageId(null);
+    setIsSaved(false);
+    notify('Image Removed', 'Removed image from document.', 'info');
+  };
+
+  // Save document directly to user's personal Google Drive
+  const handleSave = async () => {
+    // 1. Save in Cloud OS local state & RTDB
     if (fileId && files.some(f => f.id === fileId)) {
       updateFile(fileId, { content, name: title });
     } else {
@@ -107,8 +207,28 @@ export const GoogleDocsApp: React.FC<GoogleDocsAppProps> = ({
         isOfflineAvailable: true
       });
     }
+
+    // 2. Real upload directly into user's private Google Drive folder
+    if (GoogleDriveService.isConnected()) {
+      try {
+        notify('Saving to Private Drive', `Uploading ${title} to private folder 'NebulaOS Workstation'...`, 'sync');
+        const savedResult = await GoogleDriveService.saveFileToDrive({
+          name: title,
+          content,
+          mimeType: 'text/plain',
+          description: 'Word & Google Docs document created in NebulaOS Workstation'
+        });
+        setIsSaved(true);
+        notify('Saved to Private Drive', `${title} saved in your private Google Drive folder ('NebulaOS Workstation')!`, 'sync');
+        return;
+      } catch (err: any) {
+        console.warn('Google Drive direct upload note:', err);
+        notify('Saved to Cloud OS', `Document saved in Cloud OS. (Drive note: ${err?.message || 'Ready'})`, 'info');
+      }
+    } else {
+      notify('Saved to Cloud OS', `${title} saved. Sign in with Google to sync to your personal Google Drive.`, 'sync');
+    }
     setIsSaved(true);
-    notify('Saved to Google Drive', `${title} updated with cloud backup.`, 'sync');
   };
 
   // Text insertion & formatting tools
@@ -145,11 +265,23 @@ export const GoogleDocsApp: React.FC<GoogleDocsAppProps> = ({
     notify('Replaced Occurrences', `Replaced ${count} instance(s) of "${findQuery}" with "${replaceQuery}"`, 'info');
   };
 
+  // Create new blank document
+  const handleCreateNewBlank = () => {
+    const newTitle = `Untitled Document ${files.length + 1}.docx`;
+    setTitle(newTitle);
+    setContent('');
+    setImages([]);
+    setFileId(`doc-${Date.now()}`);
+    setIsSaved(true);
+    notify('New Document Created', 'Opened a clean, blank Word document.', 'info');
+  };
+
   // Create document from template
   const handleCreateFromTemplate = (templateName: string, tContent: string) => {
     const newTitle = `Untitled ${templateName} ${files.length + 1}.docx`;
     setTitle(newTitle);
     setContent(tContent);
+    setImages([]);
     setFileId(`doc-${Date.now()}`);
     setIsSaved(false);
     setShowTemplatesModal(false);
@@ -193,8 +325,19 @@ export const GoogleDocsApp: React.FC<GoogleDocsAppProps> = ({
     }
   };
 
+  const selectedImage = images.find(img => img.id === selectedImageId);
+
   return (
     <div className={`h-full flex flex-col select-none text-xs ${settings.theme === 'dark' ? 'text-neutral-200' : 'text-neutral-800'}`}>
+      {/* Hidden file input for laptop image uploads */}
+      <input
+        type="file"
+        ref={imageUploadRef}
+        accept="image/*"
+        className="hidden"
+        onChange={handleUploadImageFromLaptop}
+      />
+
       {/* Top Header & Document Title */}
       <div className={`h-12 border-b flex items-center justify-between px-4 gap-2 ${
         settings.theme === 'dark' ? 'bg-neutral-800/80 border-white/10' : 'bg-neutral-100/90 border-black/10'
@@ -225,15 +368,15 @@ export const GoogleDocsApp: React.FC<GoogleDocsAppProps> = ({
           </span>
         </div>
 
-        {/* Right actions: New, Open, Save, Team, Export */}
+        {/* Right actions: New, Open, Save, User Account, Export */}
         <div className="flex items-center space-x-2">
           <button
-            onClick={() => setShowTemplatesModal(true)}
+            onClick={handleCreateNewBlank}
             className="flex items-center space-x-1 px-2.5 py-1.5 rounded-md bg-blue-600/15 text-blue-400 hover:bg-blue-600/25 transition-colors font-medium text-xs"
-            title="Create new document"
+            title="Create brand new blank document"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>New File</span>
+            <span>New Blank</span>
           </button>
 
           <button
@@ -245,44 +388,30 @@ export const GoogleDocsApp: React.FC<GoogleDocsAppProps> = ({
             <span>Open</span>
           </button>
 
-          {/* Active Collaborators */}
-          <div className="flex items-center -space-x-1.5 mx-1">
-            {teamPresence.slice(0, 3).map((m, idx) => (
-              <div 
-                key={m.id || idx}
-                className={`w-5 h-5 rounded-full border border-neutral-900 text-[9px] font-bold text-white flex items-center justify-center ${m.avatarColor}`}
-                title={`${m.name} is editing`}
-              >
-                {m.name[0]}
-              </div>
-            ))}
+          {/* User Account / Drive status */}
+          <div className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px]">
+            <HardDrive className="w-3 h-3 text-emerald-400" />
+            <span className="font-mono truncate max-w-[120px]">{user?.email || 'Connected Google Drive'}</span>
           </div>
 
           <button
             onClick={handleSave}
-            className="flex items-center space-x-1 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors text-xs"
-            title="Save changes to Google Drive"
+            className="flex items-center space-x-1 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm transition-colors text-xs"
+            title="Save document directly to your personal Google Drive"
           >
             <Save className="w-3.5 h-3.5" />
-            <span>Save</span>
+            <span>Save to Drive</span>
           </button>
 
-          <div className="flex items-center border border-white/10 rounded-md overflow-hidden">
-            <button
-              onClick={() => handleDownload('docx')}
-              className="px-2.5 py-1.5 hover:bg-white/10 text-xs font-medium"
-              title="Download Microsoft Word format (.docx)"
-            >
-              .docx
-            </button>
-            <button
-              onClick={() => handleDownload('pdf')}
-              className="px-2.5 py-1.5 hover:bg-white/10 text-xs font-medium border-l border-white/10"
-              title="Export PDF format (.pdf)"
-            >
-              PDF
-            </button>
-          </div>
+          {/* Export to device */}
+          <button
+            onClick={() => handleDownload('docx')}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-sm transition-all active:scale-95"
+            title="Export document directly to your device (PC)"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export</span>
+          </button>
         </div>
       </div>
 
@@ -425,29 +554,31 @@ export const GoogleDocsApp: React.FC<GoogleDocsAppProps> = ({
 
         <div className="w-[1px] h-4 bg-white/10"></div>
 
-        {/* Insert Elements: Table, Image, Divider */}
+        {/* Add Image from Laptop & URL Button */}
+        <button
+          onClick={() => imageUploadRef.current?.click()}
+          className="flex items-center space-x-1 px-2 py-1 rounded bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 font-medium transition-colors"
+          title="Upload image from your laptop/computer and edit it"
+        >
+          <Upload className="w-3.5 h-3.5" />
+          <span>Upload Image</span>
+        </button>
+
+        <button
+          onClick={() => setShowImageModal(true)}
+          className="flex items-center space-x-1 px-2 py-1 rounded hover:bg-white/10 transition-colors"
+          title="Insert image by URL"
+        >
+          <ImageIcon className="w-3.5 h-3.5" />
+          <span>Image Link</span>
+        </button>
+
         <button
           onClick={() => insertText('\n| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| Data A | Data B | Data C |\n')}
           className="p-1.5 rounded hover:bg-white/10 transition-colors"
           title="Insert Table"
         >
           <TableIcon className="w-3.5 h-3.5" />
-        </button>
-
-        <button
-          onClick={() => insertText('![Image Asset](https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=600&q=80)')}
-          className="p-1.5 rounded hover:bg-white/10 transition-colors"
-          title="Insert Image"
-        >
-          <ImageIcon className="w-3.5 h-3.5" />
-        </button>
-
-        <button
-          onClick={() => insertText('\n---\n')}
-          className="px-2 py-1 rounded hover:bg-white/10 transition-colors text-[11px]"
-          title="Horizontal Page Divider"
-        >
-          Divider
         </button>
 
         <div className="w-[1px] h-4 bg-white/10"></div>
@@ -470,7 +601,7 @@ export const GoogleDocsApp: React.FC<GoogleDocsAppProps> = ({
           className={`flex items-center gap-1 px-2 py-1 rounded border text-xs transition-colors ${
             isPaginatedView ? 'bg-white/15 border-white/20' : 'border-white/10 hover:bg-white/10 opacity-70'
           }`}
-          title="Toggle A4 Paper View vs Continuous"
+          title="Toggle Paper View vs Continuous"
         >
           <Layout className="w-3 h-3" />
           <span>{isPaginatedView ? 'Paper View' : 'Continuous'}</span>
@@ -517,24 +648,351 @@ export const GoogleDocsApp: React.FC<GoogleDocsAppProps> = ({
         </div>
       )}
 
-      {/* Document Workspace Canvas */}
-      <div className="flex-1 overflow-y-auto bg-black/5 dark:bg-black/40 p-4 md:p-8 flex justify-center">
-        <div className={`w-full max-w-4xl transition-all ${
-          isPaginatedView 
-            ? 'min-h-[900px] shadow-2xl rounded-2xl p-10 md:p-14 border border-black/10 dark:border-white/15 bg-white dark:bg-neutral-900' 
-            : 'h-full p-4 bg-transparent'
-        }`}>
-          <textarea
-            ref={textareaRef}
-            value={content}
-            onChange={handleContentChange}
-            placeholder="Start typing your Word document..."
-            style={{ fontSize: `${fontSize}px`, textAlign }}
-            className={`w-full h-full min-h-[750px] bg-transparent outline-none resize-none leading-relaxed border-none font-sans ${getFontFamilyClass()} ${
-              settings.theme === 'dark' ? 'text-neutral-100 placeholder:text-neutral-600' : 'text-neutral-900 placeholder:text-neutral-400'
-            }`}
-          />
+      {/* Insert Image URL Modal */}
+      {showImageModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className={`w-full max-w-md rounded-2xl border p-5 shadow-2xl ${
+            settings.theme === 'dark' ? 'bg-neutral-900 border-white/15' : 'bg-white border-black/15'
+          }`}>
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-bold text-sm flex items-center gap-2">
+                <ImageIcon className="w-4 h-4 text-sky-400" />
+                <span>Add Image to Document</span>
+              </h3>
+              <button onClick={() => setShowImageModal(false)} className="hover:opacity-100 opacity-60">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[11px] opacity-70 mb-1">Image URL</label>
+                <input
+                  type="text"
+                  placeholder="https://example.com/photo.png"
+                  value={imageUrlInput}
+                  onChange={(e) => setImageUrlInput(e.target.value)}
+                  className="w-full px-3 py-1.5 rounded-lg border border-white/15 bg-black/20 text-xs outline-none focus:border-sky-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] opacity-70 mb-1">Caption / Label (Optional)</label>
+                <input
+                  type="text"
+                  placeholder="Diagram A: Render Pipeline"
+                  value={imageCaptionInput}
+                  onChange={(e) => setImageCaptionInput(e.target.value)}
+                  className="w-full px-3 py-1.5 rounded-lg border border-white/15 bg-black/20 text-xs outline-none focus:border-sky-400"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-between items-center">
+                <button
+                  onClick={() => {
+                    setShowImageModal(false);
+                    imageUploadRef.current?.click();
+                  }}
+                  className="text-xs text-sky-400 hover:underline flex items-center gap-1"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Or upload from laptop</span>
+                </button>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowImageModal(false)}
+                    className="px-3 py-1.5 rounded-lg hover:bg-white/10 text-xs"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAddImageFromUrl}
+                    disabled={!imageUrlInput.trim()}
+                    className="px-4 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 disabled:opacity-40 text-white font-medium text-xs shadow"
+                  >
+                    Add Image
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
+      )}
+
+      {/* Main Workspace: Document Page + Image Inspector Panel */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Document Workspace Canvas */}
+        <div className="flex-1 overflow-y-auto bg-black/5 dark:bg-black/40 p-4 md:p-8 flex justify-center">
+          <div className={`w-full max-w-4xl transition-all flex flex-col ${
+            isPaginatedView 
+              ? 'min-h-[900px] shadow-2xl rounded-2xl p-8 md:p-12 border border-black/10 dark:border-white/15 bg-white dark:bg-neutral-900' 
+              : 'h-full p-4 bg-transparent'
+          }`}>
+            {/* Interactive Document Images Gallery */}
+            {images.length > 0 && (
+              <div className="mb-6 pb-4 border-b border-white/10 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-xs opacity-75 flex items-center gap-1.5">
+                    <ImageIcon className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Embedded Document Images ({images.length})</span>
+                  </span>
+                  <button
+                    onClick={() => imageUploadRef.current?.click()}
+                    className="text-[11px] text-sky-400 hover:underline flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Add Another Image</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {images.map((img) => {
+                    const isSelected = selectedImageId === img.id;
+                    const sizeClass = img.size === 'sm' ? 'max-w-xs' : img.size === 'md' ? 'max-w-md' : img.size === 'lg' ? 'max-w-xl' : 'w-full';
+                    const alignClass = img.align === 'left' ? 'mr-auto' : img.align === 'right' ? 'ml-auto' : 'mx-auto';
+                    const radiusClass = img.borderRadius === 'circle' ? 'rounded-full' : img.borderRadius === 'rounded' ? 'rounded-xl' : 'rounded-none';
+
+                    // Compute filter CSS string
+                    let filterString = `brightness(${img.brightness}%) contrast(${img.contrast}%)`;
+                    if (img.filter === 'grayscale') filterString += ' grayscale(100%)';
+                    else if (img.filter === 'sepia') filterString += ' sepia(100%)';
+                    else if (img.filter === 'invert') filterString += ' invert(100%)';
+                    else if (img.filter === 'blur') filterString += ' blur(2px)';
+                    else if (img.filter === 'warm') filterString += ' sepia(30%) saturate(140%)';
+                    else if (img.filter === 'cool') filterString += ' hue-rotate(180deg)';
+
+                    return (
+                      <div
+                        key={img.id}
+                        onClick={() => setSelectedImageId(img.id)}
+                        className={`group relative p-2.5 rounded-2xl border transition-all cursor-pointer ${
+                          isSelected 
+                            ? 'border-sky-500 bg-sky-500/10 ring-2 ring-sky-500/30 shadow-lg' 
+                            : 'border-white/10 hover:border-white/30 bg-black/10 dark:bg-white/5'
+                        }`}
+                      >
+                        <div className={`overflow-hidden flex items-center justify-center ${sizeClass} ${alignClass}`}>
+                          <img
+                            src={img.url}
+                            alt={img.caption || img.name}
+                            style={{
+                              transform: `rotate(${img.rotation}deg)`,
+                              filter: filterString,
+                            }}
+                            className={`max-h-64 object-contain transition-all ${radiusClass}`}
+                          />
+                        </div>
+
+                        {img.caption && (
+                          <div className="text-center text-[11px] opacity-75 mt-2 italic">
+                            {img.caption}
+                          </div>
+                        )}
+
+                        {/* Quick action buttons on image */}
+                        <div className="absolute top-2 right-2 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedImageId(img.id);
+                            }}
+                            className="p-1 rounded bg-black/70 text-white hover:bg-sky-500 transition-colors"
+                            title="Edit image properties"
+                          >
+                            <Sliders className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteImage(img.id);
+                            }}
+                            className="p-1 rounded bg-black/70 text-rose-400 hover:bg-rose-600 hover:text-white transition-colors"
+                            title="Delete image"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <textarea
+              ref={textareaRef}
+              value={content}
+              onChange={handleContentChange}
+              placeholder="Start typing your new Word document... You can also upload images from your laptop and format text using the ribbon above."
+              style={{ fontSize: `${fontSize}px`, textAlign }}
+              className={`w-full flex-1 min-h-[700px] bg-transparent outline-none resize-none leading-relaxed border-none font-sans ${getFontFamilyClass()} ${
+                settings.theme === 'dark' ? 'text-neutral-100 placeholder:text-neutral-600' : 'text-neutral-900 placeholder:text-neutral-400'
+              }`}
+            />
+          </div>
+        </div>
+
+        {/* Selected Image Inspector Sidebar Drawer */}
+        {selectedImage && (
+          <div className={`w-64 border-l p-4 flex flex-col justify-between overflow-y-auto ${
+            settings.theme === 'dark' ? 'bg-neutral-900/90 border-white/10' : 'bg-neutral-50/90 border-black/10'
+          }`}>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b pb-2 border-white/10">
+                <span className="font-bold text-xs flex items-center gap-1.5">
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-sky-400" />
+                  <span>Image Editor</span>
+                </span>
+                <button onClick={() => setSelectedImageId(null)} className="opacity-60 hover:opacity-100">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Caption */}
+              <div>
+                <label className="block text-[10px] font-semibold opacity-60 uppercase mb-1">Caption</label>
+                <input
+                  type="text"
+                  value={selectedImage.caption}
+                  onChange={(e) => handleUpdateImage(selectedImage.id, { caption: e.target.value })}
+                  placeholder="Enter caption..."
+                  className="w-full px-2 py-1 rounded border border-white/15 bg-black/20 text-xs outline-none"
+                />
+              </div>
+
+              {/* Size Selector */}
+              <div>
+                <label className="block text-[10px] font-semibold opacity-60 uppercase mb-1">Scale &amp; Width</label>
+                <div className="grid grid-cols-4 gap-1">
+                  {(['sm', 'md', 'lg', 'full'] as const).map((sz) => (
+                    <button
+                      key={sz}
+                      onClick={() => handleUpdateImage(selectedImage.id, { size: sz })}
+                      className={`py-1 rounded text-[11px] font-medium transition-colors ${
+                        selectedImage.size === sz ? 'bg-sky-500 text-white font-bold' : 'bg-white/5 hover:bg-white/10 opacity-70'
+                      }`}
+                    >
+                      {sz.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Alignment */}
+              <div>
+                <label className="block text-[10px] font-semibold opacity-60 uppercase mb-1">Alignment</label>
+                <div className="grid grid-cols-3 gap-1">
+                  {(['left', 'center', 'right'] as const).map((al) => (
+                    <button
+                      key={al}
+                      onClick={() => handleUpdateImage(selectedImage.id, { align: al })}
+                      className={`py-1 rounded text-[11px] font-medium capitalize transition-colors ${
+                        selectedImage.align === al ? 'bg-sky-500 text-white font-bold' : 'bg-white/5 hover:bg-white/10 opacity-70'
+                      }`}
+                    >
+                      {al}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Rotation */}
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-[10px] font-semibold opacity-60 uppercase">Rotation</label>
+                  <span className="text-[10px] font-mono text-sky-400">{selectedImage.rotation}°</span>
+                </div>
+                <button
+                  onClick={() => handleUpdateImage(selectedImage.id, { rotation: (selectedImage.rotation + 90) % 360 })}
+                  className="w-full py-1.5 rounded-lg border border-white/15 hover:bg-white/10 flex items-center justify-center space-x-1.5 text-xs"
+                >
+                  <RotateCw className="w-3 h-3" />
+                  <span>Rotate 90° Clockwise</span>
+                </button>
+              </div>
+
+              {/* Brightness Slider */}
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-[10px] font-semibold opacity-60 uppercase">Brightness</label>
+                  <span className="text-[10px] font-mono text-sky-400">{selectedImage.brightness}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="50"
+                  max="150"
+                  value={selectedImage.brightness}
+                  onChange={(e) => handleUpdateImage(selectedImage.id, { brightness: Number(e.target.value) })}
+                  className="w-full accent-sky-500 h-1.5 rounded-full cursor-pointer"
+                />
+              </div>
+
+              {/* Contrast Slider */}
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-[10px] font-semibold opacity-60 uppercase">Contrast</label>
+                  <span className="text-[10px] font-mono text-sky-400">{selectedImage.contrast}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="50"
+                  max="150"
+                  value={selectedImage.contrast}
+                  onChange={(e) => handleUpdateImage(selectedImage.id, { contrast: Number(e.target.value) })}
+                  className="w-full accent-sky-500 h-1.5 rounded-full cursor-pointer"
+                />
+              </div>
+
+              {/* Aesthetic Filter */}
+              <div>
+                <label className="block text-[10px] font-semibold opacity-60 uppercase mb-1">Creative Filter</label>
+                <select
+                  value={selectedImage.filter}
+                  onChange={(e) => handleUpdateImage(selectedImage.id, { filter: e.target.value as any })}
+                  className="w-full px-2 py-1 rounded border border-white/15 bg-black/20 text-xs outline-none"
+                >
+                  <option value="none">Standard (None)</option>
+                  <option value="grayscale">Black &amp; White (Grayscale)</option>
+                  <option value="sepia">Warm Vintage (Sepia)</option>
+                  <option value="invert">Inverted Negative</option>
+                  <option value="blur">Soft Focus (Blur)</option>
+                  <option value="warm">Vibrant Warm</option>
+                  <option value="cool">Cinematic Cool</option>
+                </select>
+              </div>
+
+              {/* Border Radius */}
+              <div>
+                <label className="block text-[10px] font-semibold opacity-60 uppercase mb-1">Corners</label>
+                <div className="grid grid-cols-3 gap-1">
+                  {(['none', 'rounded', 'circle'] as const).map((cr) => (
+                    <button
+                      key={cr}
+                      onClick={() => handleUpdateImage(selectedImage.id, { borderRadius: cr })}
+                      className={`py-1 rounded text-[11px] font-medium capitalize transition-colors ${
+                        selectedImage.borderRadius === cr ? 'bg-sky-500 text-white font-bold' : 'bg-white/5 hover:bg-white/10 opacity-70'
+                      }`}
+                    >
+                      {cr}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Delete Image button */}
+            <div className="pt-4 border-t border-white/10">
+              <button
+                onClick={() => handleDeleteImage(selectedImage.id)}
+                className="w-full py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 font-semibold text-xs flex items-center justify-center space-x-1.5 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Image</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Word Statistics Status Bar */}
@@ -546,75 +1004,22 @@ export const GoogleDocsApp: React.FC<GoogleDocsAppProps> = ({
           <span>•</span>
           <span>Characters: {charCount}</span>
           <span>•</span>
-          <span>Paragraphs: {paragraphCount}</span>
+          <span>Images: {images.length}</span>
         </div>
         <div className="flex items-center space-x-3">
           <span>Read time: ~{readingTime} min</span>
           <span>•</span>
-          <span>Cloud Autosave: Active</span>
+          <span>Google Drive Cloud Autosave: Active</span>
         </div>
       </div>
-
-      {/* Templates Modal */}
-      {showTemplatesModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`w-full max-w-lg rounded-2xl border p-5 shadow-2xl ${
-            settings.theme === 'dark' ? 'bg-neutral-900 border-white/15' : 'bg-white border-black/15'
-          }`}>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-sm flex items-center gap-2">
-                <FilePlus className="w-4 h-4 text-blue-500" />
-                <span>Create New Word Document</span>
-              </h3>
-              <button onClick={() => setShowTemplatesModal(false)} className="hover:opacity-100 opacity-60">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { 
-                  name: 'Blank Document', 
-                  desc: 'Clean page ready for writing.', 
-                  content: '# Untitled Document\n\nStart typing your content here...' 
-                },
-                { 
-                  name: 'Creative Project Brief', 
-                  desc: 'Objective, deliverables, timeline & roles.', 
-                  content: '# Project Creative Brief\n\n## 1. Project Goal & Purpose\nDefine target creative deliverables.\n\n## 2. Target Audience\nHigh-performance 3D visual artists.\n\n## 3. Scope of Work\n- Key visual keyframes\n- Motion graphics styling\n- 4K delivery format' 
-                },
-                { 
-                  name: 'Technical Specification', 
-                  desc: 'Architecture, APIs, hardware constraints.', 
-                  content: '# System Architecture Specification\n\n## 1. Modules\n- Zsh Unix Shell Core\n- GPU Thermal Throttle Guard\n- Web Audio Synthesizer Engine\n\n## 2. API Endpoints\n`GET /api/browser/proxy`' 
-                },
-                { 
-                  name: 'Meeting Minutes', 
-                  desc: 'Attendees, agenda, decisions & action items.', 
-                  content: '# Team Sprint Sync\n\n**Date:** Today\n**Attendees:** Creative Director, Lead Engineer, Sound Producer\n\n## Agenda\n1. Review M3 Ultra Raytracing benchmarks\n2. Approve Keynote presentation deck\n\n## Action Items\n- [ ] Export final deck to .key format\n- [ ] Verify Google Drive delta sync' 
-                }
-              ].map((t) => (
-                <div
-                  key={t.name}
-                  onClick={() => handleCreateFromTemplate(t.name, t.content)}
-                  className="p-3.5 rounded-xl border border-white/10 hover:border-blue-500 hover:bg-blue-500/10 cursor-pointer transition-all"
-                >
-                  <div className="font-semibold text-xs text-blue-400">{t.name}</div>
-                  <div className="text-[10px] opacity-60 mt-1">{t.desc}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Open File Modal */}
       {showOpenModal && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`w-full max-w-lg rounded-2xl border p-5 shadow-2xl ${
+          <div className={`w-full max-w-md rounded-2xl border p-5 shadow-2xl ${
             settings.theme === 'dark' ? 'bg-neutral-900 border-white/15' : 'bg-white border-black/15'
           }`}>
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex justify-between items-center mb-3">
               <h3 className="font-bold text-sm flex items-center gap-2">
                 <FolderOpen className="w-4 h-4 text-blue-500" />
                 <span>Open Document from Google Drive</span>
@@ -624,25 +1029,24 @@ export const GoogleDocsApp: React.FC<GoogleDocsAppProps> = ({
               </button>
             </div>
 
-            <div className="max-h-64 overflow-y-auto divide-y divide-white/10">
-              {files.filter(f => f.type === 'document' || f.name.endsWith('.doc') || f.name.endsWith('.docx') || f.name.endsWith('.txt') || f.name.endsWith('.md')).map((f) => (
-                <div
-                  key={f.id}
-                  onClick={() => handleOpenFile(f)}
-                  className="p-3 hover:bg-white/5 cursor-pointer rounded-lg flex items-center justify-between transition-colors"
-                >
-                  <div className="flex items-center space-x-3">
-                    <FileText className="w-5 h-5 text-blue-500" />
+            <div className="max-h-60 overflow-y-auto space-y-1">
+              {files.filter(f => f.type === 'document' || f.name.endsWith('.doc') || f.name.endsWith('.docx') || f.name.endsWith('.md')).length === 0 ? (
+                <div className="p-4 text-center opacity-60">No saved documents found in Google Drive.</div>
+              ) : (
+                files.filter(f => f.type === 'document' || f.name.endsWith('.doc') || f.name.endsWith('.docx') || f.name.endsWith('.md')).map(f => (
+                  <div
+                    key={f.id}
+                    onClick={() => handleOpenFile(f)}
+                    className="p-2.5 rounded-xl hover:bg-white/10 cursor-pointer flex justify-between items-center transition-colors"
+                  >
                     <div>
                       <div className="font-semibold text-xs">{f.name}</div>
-                      <div className="text-[10px] opacity-60">{f.path} • {f.size}</div>
+                      <div className="text-[10px] opacity-60">{f.size} • {f.path}</div>
                     </div>
+                    <span className="text-[10px] font-mono text-blue-400">Open</span>
                   </div>
-                  <button className="px-2.5 py-1 rounded bg-blue-600/20 text-blue-400 text-xs font-semibold">
-                    Open
-                  </button>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>

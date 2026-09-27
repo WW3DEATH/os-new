@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { useOS } from '../../context/OSContext';
+import { sounds } from '../../utils/sound';
 import { 
   Wifi, 
   Bluetooth, 
@@ -7,6 +8,7 @@ import {
   Sun, 
   Moon, 
   Volume2, 
+  VolumeX,
   Flame, 
   Layers, 
   Cloud, 
@@ -140,7 +142,7 @@ export const ControlCenter: React.FC = () => {
       <div className="p-2.5 rounded-xl bg-black/10 dark:bg-white/10 mb-2">
         <div className="flex justify-between text-[11px] mb-1 opacity-70">
           <span>Display Brightness (5K Retina)</span>
-          <span>100%</span>
+          <span className="font-mono font-semibold">{settings.brightness ?? 100}%</span>
         </div>
         <div className="flex items-center space-x-2">
           <Sun className="w-3.5 h-3.5 opacity-60" />
@@ -148,8 +150,10 @@ export const ControlCenter: React.FC = () => {
             type="range"
             min="20"
             max="100"
-            defaultValue="100"
+            value={settings.brightness ?? 100}
+            onChange={(e) => updateSettings({ brightness: Number(e.target.value) })}
             className="flex-1 accent-sky-500 h-1.5 rounded-full cursor-pointer"
+            title={`Display Brightness: ${settings.brightness ?? 100}%`}
           />
         </div>
       </div>
@@ -158,16 +162,39 @@ export const ControlCenter: React.FC = () => {
       <div className="p-2.5 rounded-xl bg-black/10 dark:bg-white/10 mb-2">
         <div className="flex justify-between text-[11px] mb-1 opacity-70">
           <span>Sound Volume</span>
-          <span>85%</span>
+          <span className="font-mono font-semibold">{settings.volume ?? 85}%</span>
         </div>
         <div className="flex items-center space-x-2">
-          <Volume2 className="w-3.5 h-3.5 opacity-60" />
+          <button
+            onClick={() => {
+              const currentVol = settings.volume ?? 85;
+              const newVol = currentVol > 0 ? 0 : 80;
+              updateSettings({ volume: newVol });
+              sounds.setVolume(newVol);
+              if (newVol > 0) sounds.playPop();
+            }}
+            className="opacity-70 hover:opacity-100 transition-opacity"
+            title={(settings.volume ?? 85) === 0 ? "Unmute Sound" : "Mute Sound"}
+          >
+            {(settings.volume ?? 85) === 0 ? (
+              <VolumeX className="w-3.5 h-3.5 text-rose-400" />
+            ) : (
+              <Volume2 className="w-3.5 h-3.5" />
+            )}
+          </button>
           <input
             type="range"
             min="0"
             max="100"
-            defaultValue="85"
+            value={settings.volume ?? 85}
+            onChange={(e) => {
+              const val = Number(e.target.value);
+              updateSettings({ volume: val });
+              sounds.setVolume(val);
+              sounds.playPop();
+            }}
             className="flex-1 accent-sky-500 h-1.5 rounded-full cursor-pointer"
+            title={`Sound Volume: ${settings.volume ?? 85}%`}
           />
         </div>
       </div>

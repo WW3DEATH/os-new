@@ -15,7 +15,13 @@ import {
   Tv, 
   Bookmark,
   ThumbsUp,
-  Share2
+  Share2,
+  Download,
+  Image as ImageIcon,
+  Check,
+  Maximize2,
+  FolderPlus,
+  Sparkles
 } from 'lucide-react';
 
 interface Tab {
@@ -23,6 +29,127 @@ interface Tab {
   title: string;
   url: string;
 }
+
+interface WallpaperResult {
+  id: string;
+  title: string;
+  url: string;
+  category: string;
+  resolution: string;
+  author: string;
+  tags: string[];
+}
+
+const DUCKDUCKGO_WALLPAPERS: WallpaperResult[] = [
+  {
+    id: 'ddg-1',
+    title: 'macOS Sequoia Redwood Forest',
+    category: 'Nature',
+    resolution: '5120 × 2880 (5K)',
+    author: 'Unsplash Studio',
+    url: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=2800&q=80',
+    tags: ['sequoia', 'forest', 'nature', 'macos', 'trees', 'green', 'fog', 'california']
+  },
+  {
+    id: 'ddg-2',
+    title: 'Sonoma Golden Sunset Coast',
+    category: 'Nature',
+    resolution: '5120 × 2880 (5K)',
+    author: 'California Scenery',
+    url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=2800&q=80',
+    tags: ['sonoma', 'sunset', 'beach', 'ocean', 'coast', 'golden', 'sun', 'sky']
+  },
+  {
+    id: 'ddg-3',
+    title: 'Deep Space Cosmic Nebula',
+    category: 'Space',
+    resolution: '6016 × 3384 (6K)',
+    author: 'James Webb Space Center',
+    url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=2800&q=80',
+    tags: ['space', 'nebula', 'stars', 'galaxy', 'cosmic', 'astronomy', 'purple', 'telescope']
+  },
+  {
+    id: 'ddg-4',
+    title: 'Cyberpunk Tokyo Neon Rain',
+    category: 'Cyberpunk',
+    resolution: '3840 × 2160 (4K)',
+    author: 'Neon City Tokyo',
+    url: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=2800&q=80',
+    tags: ['cyberpunk', 'tokyo', 'neon', 'city', 'night', 'rain', 'futuristic', 'japan']
+  },
+  {
+    id: 'ddg-5',
+    title: 'Dark Minimalist Architectural Studio',
+    category: 'Minimalist',
+    resolution: '3840 × 2160 (4K)',
+    author: 'Nordic Creative Lab',
+    url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=2800&q=80',
+    tags: ['minimalist', 'dark', 'architecture', 'gradient', 'abstract', 'black', 'smooth']
+  },
+  {
+    id: 'ddg-6',
+    title: 'High Sierra Alpine Snowy Peak',
+    category: 'Nature',
+    resolution: '5120 × 2880 (5K)',
+    author: 'Alpine Explorers',
+    url: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=2800&q=80',
+    tags: ['mountain', 'snow', 'peak', 'sierra', 'nature', 'landscape', 'sky', 'alps']
+  },
+  {
+    id: 'ddg-7',
+    title: 'Retina Fluid Liquid Neon Gradient',
+    category: 'Abstract',
+    resolution: '5120 × 2880 (5K)',
+    author: 'Studio Fluid Motion',
+    url: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=2800&q=80',
+    tags: ['gradient', 'liquid', 'abstract', 'colors', 'neon', 'fluid', '3d', 'glow']
+  },
+  {
+    id: 'ddg-8',
+    title: 'Minimalist Apple M3 Studio Desk',
+    category: 'Workspace',
+    resolution: '3840 × 2160 (4K)',
+    author: 'Mac Pro Studio',
+    url: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=2800&q=80',
+    tags: ['desk', 'studio', 'apple', 'macbook', 'setup', 'workstation', 'clean', 'tech']
+  },
+  {
+    id: 'ddg-9',
+    title: 'Night Sky Aurora Borealis',
+    category: 'Space',
+    resolution: '3840 × 2160 (4K)',
+    author: 'Nordic Auroras',
+    url: 'https://images.unsplash.com/photo-1531366936337-7c912a4589a7?auto=format&fit=crop&w=2800&q=80',
+    tags: ['aurora', 'borealis', 'night', 'sky', 'green', 'stars', 'norway', 'lights']
+  },
+  {
+    id: 'ddg-10',
+    title: 'Cyberpunk Hovercraft City Overlook',
+    category: 'Cyberpunk',
+    resolution: '3840 × 2160 (4K)',
+    author: 'Sci-Fi Vistas',
+    url: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=2800&q=80',
+    tags: ['cyberpunk', 'futuristic', 'hover', 'sci-fi', 'art', 'future', 'bladerunner']
+  },
+  {
+    id: 'ddg-11',
+    title: 'Minimalist Clean Sand Dunes Sunset',
+    category: 'Minimalist',
+    resolution: '5120 × 2880 (5K)',
+    author: 'Desert Solitude',
+    url: 'https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&w=2800&q=80',
+    tags: ['desert', 'dunes', 'sand', 'minimalist', 'clean', 'sunset', 'warm', 'peaceful']
+  },
+  {
+    id: 'ddg-12',
+    title: 'Emerald Lake & Mountain Reflection',
+    category: 'Nature',
+    resolution: '3840 × 2160 (4K)',
+    author: 'Canadian Rockies',
+    url: 'https://images.unsplash.com/photo-1439853941329-a99ce049f08c?auto=format&fit=crop&w=2800&q=80',
+    tags: ['lake', 'emerald', 'pine', 'water', 'reflection', 'mountain', 'nature', 'canada']
+  }
+];
 
 interface YouTubeVideo {
   id: string;
@@ -35,7 +162,12 @@ interface YouTubeVideo {
 }
 
 export const BrowserApp: React.FC = () => {
-  const { settings, notify } = useOS();
+  const { settings, updateSettings, createFile, notify } = useOS();
+
+  // DuckDuckGo Wallpaper Explorer State
+  const [ddgWallpaperQuery, setDdgWallpaperQuery] = useState<string>('');
+  const [ddgSelectedCategory, setDdgSelectedCategory] = useState<string>('All');
+  const [previewWallpaper, setPreviewWallpaper] = useState<WallpaperResult | null>(null);
 
   // Persistent Tabs from localStorage
   const [tabs, setTabs] = useState<Tab[]>(() => {
@@ -176,11 +308,14 @@ export const BrowserApp: React.FC = () => {
     const handleMessage = (e: MessageEvent) => {
       if (e.data && e.data.type === 'NEBULA_BROWSER_NAVIGATE' && e.data.url) {
         handleNavigate(e.data.url);
+      } else if (e.data && e.data.type === 'NEBULA_SET_WALLPAPER' && e.data.url) {
+        updateSettings({ wallpaper: e.data.url });
+        notify('Wallpaper Updated', 'Image from web applied as desktop wallpaper!', 'info');
       }
     };
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [activeTabId, history, historyIndex]);
+  }, [activeTabId, history, historyIndex, updateSettings, notify]);
 
   const isYouTubeUrl = (url: string) => {
     return url.includes('youtube.com') || url.includes('youtu.be');
@@ -353,21 +488,61 @@ export const BrowserApp: React.FC = () => {
     }
   };
 
+  const handleSetWallpaper = (url: string, title: string) => {
+    updateSettings({ wallpaper: url });
+    notify('Wallpaper Updated', `Set "${title}" as desktop background!`, 'info');
+  };
+
+  const handleDownloadImage = (url: string, title: string) => {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title.toLowerCase().replace(/[^a-z0-9]/g, '_')}_wallpaper.jpg`;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    notify('Image Downloaded', `Downloading "${title}" image to computer.`, 'info');
+  };
+
+  const handleSaveToFinder = (url: string, title: string) => {
+    createFile({
+      name: `${title.replace(/[^a-zA-Z0-9]/g, '_')}_4K.jpg`,
+      path: `/Pictures/Wallpapers/${title.replace(/[^a-zA-Z0-9]/g, '_')}_4K.jpg`,
+      type: 'image',
+      size: '4.8 MB',
+      tags: ['wallpaper', 'duckduckgo', 'safari'],
+      isCloudSynced: true,
+      isOfflineAvailable: true,
+      content: url
+    });
+    notify('Saved to Finder', `Saved "${title}" to /Pictures/Wallpapers/ in Finder!`, 'info');
+  };
+
   // Quick Favorites Bar
   const quickFavorites = [
+    { title: 'DuckDuckGo Wallpapers', url: 'ddg:wallpapers', icon: '🖼️', color: 'text-amber-400' },
     { title: 'YouTube', url: 'https://www.youtube.com', icon: 'YT', color: 'text-red-500' },
     { title: 'Google Search', url: 'https://html.duckduckgo.com/html/?q=trending+tech+news', icon: 'G', color: 'text-blue-400' },
     { title: 'Wikipedia', url: 'https://en.m.wikipedia.org', icon: 'W', color: 'text-neutral-300' },
     { title: 'Hacker News', url: 'https://news.ycombinator.com', icon: 'Y', color: 'text-orange-400' },
     { title: 'GitHub', url: 'https://html.duckduckgo.com/html/?q=site%3Agithub.com+trending', icon: 'GH', color: 'text-emerald-400' },
     { title: 'MDN Web Docs', url: 'https://developer.mozilla.org/en-US/docs/Web', icon: 'M', color: 'text-sky-400' },
-    { title: 'BBC News', url: 'https://www.bbc.com/news', icon: 'B', color: 'text-rose-400' },
   ];
 
   const filteredYtVideos = ytVideos.filter(v => {
     const matchesCategory = ytSelectedCategory === 'All' || v.category === ytSelectedCategory;
     const matchesSearch = !ytSearchQuery || v.title.toLowerCase().includes(ytSearchQuery.toLowerCase()) || v.channel.toLowerCase().includes(ytSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
+  });
+
+  const filteredWallpapers = DUCKDUCKGO_WALLPAPERS.filter(wp => {
+    const matchesCat = ddgSelectedCategory === 'All' || wp.category === ddgSelectedCategory;
+    const q = ddgWallpaperQuery.toLowerCase().trim();
+    const matchesQuery = !q || 
+      wp.title.toLowerCase().includes(q) || 
+      wp.category.toLowerCase().includes(q) || 
+      wp.tags.some(t => t.toLowerCase().includes(q));
+    return matchesCat && matchesQuery;
   });
 
   const activeYtVideo = ytVideos.find(v => v.id === ytActiveVideoId) || {
@@ -490,8 +665,21 @@ export const BrowserApp: React.FC = () => {
         </form>
 
         <div className="flex items-center space-x-1.5">
+          <button
+            onClick={() => handleNavigate('ddg:wallpapers')}
+            className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all ${
+              activeTab.url === 'ddg:wallpapers'
+                ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                : 'border-white/10 hover:bg-white/10 text-amber-400 hover:text-amber-300'
+            }`}
+            title="DuckDuckGo 4K Wallpapers Search & Download Studio"
+          >
+            <ImageIcon className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">DuckDuckGo Wallpapers</span>
+          </button>
+
           <a
-            href={activeTab.url === 'about:start' ? 'https://www.google.com' : activeTab.url}
+            href={activeTab.url === 'about:start' || activeTab.url === 'ddg:wallpapers' ? 'https://duckduckgo.com' : activeTab.url}
             target="_blank"
             rel="noreferrer"
             className="p-1.5 rounded hover:bg-white/10 opacity-70 hover:opacity-100 transition-colors flex items-center gap-1 text-[11px]"
@@ -690,6 +878,189 @@ export const BrowserApp: React.FC = () => {
               </div>
             </div>
           </div>
+        ) : activeTab.url === 'ddg:wallpapers' || activeTab.url.includes('duckduckgo.com/?iax=images') ? (
+          /* DuckDuckGo 4K Wallpaper & Image Search Studio */
+          <div className="h-full overflow-y-auto p-5 flex flex-col bg-[#111317] text-white">
+            {/* DuckDuckGo Studio Header */}
+            <div className="flex items-center justify-between pb-4 mb-4 border-b border-white/10 gap-4 flex-wrap">
+              <div className="flex items-center space-x-3">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-600 flex items-center justify-center text-white shadow-lg">
+                  <ImageIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-sm text-white">DuckDuckGo 4K Wallpapers &amp; Images</h3>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono font-semibold border border-amber-500/30">
+                      Retina Studio
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-neutral-400">Search DuckDuckGo, download high-res images, or set them as your OS wallpaper instantly.</p>
+                </div>
+              </div>
+
+              {/* Search Bar for Wallpapers */}
+              <div className="flex items-center gap-2 max-w-md w-full">
+                <div className="flex-1 flex items-center px-3 py-1.5 rounded-xl bg-neutral-900 border border-white/15 focus-within:border-amber-500 text-xs">
+                  <Search className="w-4 h-4 opacity-50 mr-2 shrink-0 text-amber-400" />
+                  <input
+                    type="text"
+                    placeholder="Search wallpapers (e.g. 4K Nature, Cyberpunk, Nebula, Sonoma)..."
+                    value={ddgWallpaperQuery}
+                    onChange={(e) => setDdgWallpaperQuery(e.target.value)}
+                    className="w-full bg-transparent outline-none text-xs text-white placeholder-white/40"
+                  />
+                  {ddgWallpaperQuery && (
+                    <button onClick={() => setDdgWallpaperQuery('')} className="p-0.5 hover:text-white opacity-60">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    const q = ddgWallpaperQuery.trim() || '4k wallpapers';
+                    handleNavigate(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q + ' wallpapers hd 4k')}`);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs whitespace-nowrap transition-colors"
+                  title="Search DuckDuckGo Web Engine"
+                >
+                  Web Images ↗
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Categories Filter */}
+            <div className="flex gap-2 mb-5 overflow-x-auto pb-1 shrink-0">
+              {['All', 'Nature', 'Cyberpunk', 'Space', 'Minimalist', 'Abstract', 'Workspace'].map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setDdgSelectedCategory(cat)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    ddgSelectedCategory === cat
+                      ? 'bg-amber-500 text-white font-bold shadow-md shadow-amber-500/20'
+                      : 'bg-neutral-800/80 text-neutral-300 hover:bg-neutral-700/80 border border-white/10'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+
+            {/* Filtered Wallpapers Grid */}
+            {filteredWallpapers.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-12 text-center text-neutral-400 space-y-3">
+                <ImageIcon className="w-12 h-12 opacity-40 text-amber-400" />
+                <div className="text-sm font-semibold text-white">No wallpapers matched "{ddgWallpaperQuery}"</div>
+                <p className="text-xs max-w-sm">Try searching for "Nature", "Space", "Cyberpunk", or click below to search DuckDuckGo live web results.</p>
+                <button
+                  onClick={() => handleNavigate(`https://html.duckduckgo.com/html/?q=${encodeURIComponent((ddgWallpaperQuery || '4k') + ' wallpaper')}`)}
+                  className="px-4 py-2 rounded-xl bg-amber-500 text-white font-semibold text-xs shadow hover:bg-amber-600"
+                >
+                  Search DuckDuckGo Live Web
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-6">
+                {filteredWallpapers.map((wp) => {
+                  const isCurrentActive = settings.wallpaper === wp.url;
+                  return (
+                    <div
+                      key={wp.id}
+                      className={`group rounded-2xl overflow-hidden border transition-all duration-200 bg-neutral-900/90 flex flex-col ${
+                        isCurrentActive
+                          ? 'border-amber-500 ring-2 ring-amber-500/40 shadow-xl shadow-amber-500/10'
+                          : 'border-white/10 hover:border-white/25 hover:shadow-xl'
+                      }`}
+                    >
+                      {/* Thumbnail Container */}
+                      <div className="relative aspect-video overflow-hidden bg-neutral-950 cursor-pointer" onClick={() => setPreviewWallpaper(wp)}>
+                        <img
+                          src={wp.url}
+                          alt={wp.title}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 opacity-60 group-hover:opacity-80 transition-opacity" />
+                        
+                        {/* Resolution Badge */}
+                        <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur text-[10px] font-mono text-amber-300 font-semibold border border-white/10">
+                          {wp.resolution}
+                        </div>
+
+                        {/* Active Indicator */}
+                        {isCurrentActive && (
+                          <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center gap-1 shadow">
+                            <Check className="w-3 h-3" />
+                            <span>Active Wallpaper</span>
+                          </div>
+                        )}
+
+                        {/* Quick Zoom Preview Icon on Hover */}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setPreviewWallpaper(wp); }}
+                          className="absolute bottom-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-black/90 text-white backdrop-blur opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Fullscreen Preview"
+                        >
+                          <Maximize2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Card Meta & Action Buttons */}
+                      <div className="p-3.5 flex flex-col justify-between flex-1 space-y-3">
+                        <div>
+                          <h4 className="font-semibold text-xs text-white truncate" title={wp.title}>{wp.title}</h4>
+                          <div className="flex items-center justify-between text-[11px] text-neutral-400 mt-1">
+                            <span>{wp.category}</span>
+                            <span>{wp.author}</span>
+                          </div>
+                        </div>
+
+                        {/* Action Buttons: Set as Wallpaper, Download Image, Save to Finder */}
+                        <div className="flex items-center gap-1.5 pt-1">
+                          <button
+                            onClick={() => handleSetWallpaper(wp.url, wp.title)}
+                            className={`flex-1 py-1.5 px-2.5 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-sm ${
+                              isCurrentActive
+                                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 cursor-default'
+                                : 'bg-amber-500 hover:bg-amber-400 text-white cursor-pointer'
+                            }`}
+                            title="Set this image as desktop wallpaper"
+                          >
+                            {isCurrentActive ? (
+                              <>
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Active</span>
+                              </>
+                            ) : (
+                              <>
+                                <ImageIcon className="w-3.5 h-3.5" />
+                                <span>Set as Wallpaper</span>
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            onClick={() => handleDownloadImage(wp.url, wp.title)}
+                            className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
+                            title="Download image file to computer"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button
+                            onClick={() => handleSaveToFinder(wp.url, wp.title)}
+                            className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
+                            title="Save to Finder (/Pictures/Wallpapers/)"
+                          >
+                            <FolderPlus className="w-3.5 h-3.5 text-sky-400" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         ) : activeTab.url === 'about:start' ? (
           /* Safari Start Page */
           <div className="h-full overflow-y-auto p-8 flex flex-col items-center">
@@ -797,6 +1168,56 @@ export const BrowserApp: React.FC = () => {
           <span>TLS 1.3 Certified</span>
         </div>
       </div>
+
+      {/* Fullscreen Wallpaper Preview Lightbox Modal */}
+      {previewWallpaper && (
+        <div 
+          onClick={() => setPreviewWallpaper(null)}
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-6 cursor-zoom-out animate-in fade-in duration-150"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()} 
+            className="relative max-w-5xl max-h-[90vh] bg-neutral-900 rounded-2xl overflow-hidden border border-white/20 shadow-2xl p-2 flex flex-col"
+          >
+            <button
+              onClick={() => setPreviewWallpaper(null)}
+              className="absolute top-4 right-4 p-2 rounded-full bg-black/60 hover:bg-black/90 text-white backdrop-blur-md z-10 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <img 
+              src={previewWallpaper.url} 
+              alt={previewWallpaper.title} 
+              className="max-h-[75vh] max-w-full object-contain rounded-xl mx-auto" 
+            />
+            <div className="p-3.5 flex justify-between items-center border-t border-white/10 mt-2 text-xs">
+              <div>
+                <h4 className="font-bold text-sm text-white">{previewWallpaper.title}</h4>
+                <p className="text-[11px] text-neutral-400">{previewWallpaper.category} • {previewWallpaper.resolution} • by {previewWallpaper.author}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    handleSetWallpaper(previewWallpaper.url, previewWallpaper.title);
+                    setPreviewWallpaper(null);
+                  }}
+                  className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-white font-semibold flex items-center gap-1.5 shadow"
+                >
+                  <ImageIcon className="w-4 h-4" />
+                  <span>Set as Desktop Wallpaper</span>
+                </button>
+                <button
+                  onClick={() => handleDownloadImage(previewWallpaper.url, previewWallpaper.title)}
+                  className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium flex items-center gap-1.5"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

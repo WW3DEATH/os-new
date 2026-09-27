@@ -15,6 +15,7 @@ import { NotesApp, TasksApp } from '../apps/NotesAndTasksApp';
 import { KeynoteApp } from '../apps/KeynoteApp';
 import { GmailApp } from '../apps/GmailApp';
 import { YouTubeApp } from '../apps/YouTubeApp';
+import { GeminiApp } from '../apps/GeminiApp';
 import { X, Minus, Maximize2 } from 'lucide-react';
 
 interface WindowFrameProps {
@@ -119,6 +120,8 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({ window: win }) => {
         return <YouTubeApp />;
       case 'gmail':
         return <GmailApp />;
+      case 'gemini':
+        return <GeminiApp />;
       case 'activity_monitor':
         return <ActivityMonitorApp />;
       case 'shortcuts':

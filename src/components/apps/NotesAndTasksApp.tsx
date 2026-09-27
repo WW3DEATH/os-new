@@ -10,7 +10,8 @@ import {
   CheckCircle2, 
   Circle,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Download
 } from 'lucide-react';
 
 export const NotesApp: React.FC = () => {
@@ -44,6 +45,18 @@ export const NotesApp: React.FC = () => {
     setNotes(notes.filter(n => n.id !== id));
     setActiveNoteId(notes.find(n => n.id !== id)?.id || '');
     notify('Note Deleted', 'Note removed from Google Keep.', 'info');
+  };
+
+  const handleExportNote = () => {
+    if (!activeNote) return;
+    const blob = new Blob([`# ${activeNote.title}\n\n${activeNote.content}`], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${activeNote.title.replace(/[^a-zA-Z0-9_-]/g, '_') || 'Note'}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    notify('Note Exported', `Downloaded ${a.download} to your computer.`, 'info');
   };
 
   return (
@@ -87,17 +100,25 @@ export const NotesApp: React.FC = () => {
       <div className="flex-1 p-6 flex flex-col space-y-3">
         {activeNote ? (
           <>
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center gap-2">
               <input
                 type="text"
                 value={activeNote.title}
                 onChange={(e) => handleUpdateActive('title', e.target.value)}
-                className="font-bold text-sm bg-transparent outline-none w-full"
+                className="font-bold text-sm bg-transparent outline-none flex-1"
                 placeholder="Note title..."
               />
               <button
+                onClick={handleExportNote}
+                className="flex items-center space-x-1 px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white font-medium text-xs transition-colors shrink-0"
+                title="Export this note directly to your device (PC)"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export to your device</span>
+              </button>
+              <button
                 onClick={() => handleDelete(activeNote.id)}
-                className="p-1.5 rounded hover:bg-rose-500/20 text-rose-400"
+                className="p-1.5 rounded hover:bg-rose-500/20 text-rose-400 shrink-0"
                 title="Delete note"
               >
                 <Trash2 className="w-4 h-4" />
@@ -146,6 +167,19 @@ export const TasksApp: React.FC = () => {
     notify('Task Added', 'New task synced to Google Tasks.', 'info');
   };
 
+  const handleExportTasks = () => {
+    const lines = tasks.map(t => `[${t.completed ? 'x' : ' '}] ${t.title} (Priority: ${t.priority})`).join('\n');
+    const content = `# Google Tasks & Milestones\nExported: ${new Date().toLocaleString()}\n\n${lines}`;
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Tasks_Milestones_${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    notify('Tasks Exported', `Downloaded ${a.download} to your computer.`, 'info');
+  };
+
   return (
     <div className={`h-full flex flex-col select-none text-xs ${settings.theme === 'dark' ? 'text-neutral-200' : 'text-neutral-800'}`}>
       <div className={`h-11 border-b flex items-center justify-between px-4 ${
@@ -155,9 +189,20 @@ export const TasksApp: React.FC = () => {
           <CheckSquare className="w-4 h-4 text-cyan-400" />
           <span className="font-semibold text-xs">Google Tasks &amp; Milestones</span>
         </div>
-        <span className="opacity-60 text-[10px]">
-          {tasks.filter(t => t.completed).length}/{tasks.length} Completed
-        </span>
+
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={handleExportTasks}
+            className="flex items-center space-x-1 px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white font-medium text-xs transition-colors shadow-sm"
+            title="Export tasks directly to your device (PC)"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export to your device</span>
+          </button>
+          <span className="opacity-60 text-[10px]">
+            {tasks.filter(t => t.completed).length}/{tasks.length} Completed
+          </span>
+        </div>
       </div>
 
       <div className="flex-1 p-4 overflow-y-auto space-y-2">

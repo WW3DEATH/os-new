@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useOS } from '../../context/OSContext';
 import { FileItem } from '../../types/os';
 import { 
@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 
 export const FinderApp: React.FC = () => {
-  const { files, createFile, deleteFile, openApp, settings } = useOS();
+  const { files, createFile, deleteFile, openApp, settings, uploadFilesFromComputer, notify } = useOS();
   const [selectedFolder, setSelectedFolder] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -36,6 +36,7 @@ export const FinderApp: React.FC = () => {
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
   const [newFileName, setNewFileName] = useState('');
   const [newFileType, setNewFileType] = useState<FileItem['type']>('document');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Filter files
   const filteredFiles = files.filter(f => {
@@ -127,6 +128,31 @@ export const FinderApp: React.FC = () => {
           </div>
 
           <div className="w-[1px] h-4 bg-white/10 mx-1"></div>
+
+          {/* Hidden file input for uploading from laptop */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files && e.target.files.length > 0) {
+                const targetDir = selectedFolder === 'gdrive' ? '/Google Drive' : '/Creative Projects';
+                uploadFilesFromComputer(e.target.files, targetDir);
+                notify('Import Complete', `Uploaded ${e.target.files.length} file(s) from your laptop to Cloud OS.`, 'info');
+              }
+            }}
+          />
+
+          {/* Upload from Laptop Button */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center space-x-1 px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-sm transition-colors"
+            title="Upload files or images directly from your laptop"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>Upload from Laptop</span>
+          </button>
 
           {/* New Item */}
           <button

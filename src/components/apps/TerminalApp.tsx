@@ -100,7 +100,7 @@ export const TerminalApp: React.FC<TerminalAppProps> = ({ initialCommand }) => {
         return;
 
       case 'whoami':
-        output = `${user?.displayName || 'Creative Producer'} <${user?.email || 'guest@studio.local'}> (ID: ${user?.uid || 'offline'})`;
+        output = `${user?.displayName || user?.email?.split('@')[0] || 'User'} <${user?.email || 'authenticated-user'}> (UID: ${user?.uid || 'google-user'})`;
         break;
 
       default:

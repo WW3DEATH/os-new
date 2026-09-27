@@ -14,7 +14,11 @@ import {
   Moon, 
   Sun,
   ShieldCheck,
-  Check
+  Check,
+  Maximize2,
+  Minimize2,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 
 export const MenuBar: React.FC = () => {
@@ -44,7 +48,29 @@ export const MenuBar: React.FC = () => {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState<string>('');
   const [currentDate, setCurrentDate] = useState<string>('');
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(() => !!document.fullscreenElement);
   const menuBarRef = useRef<HTMLDivElement>(null);
+
+  // Fullscreen state listener
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch (err) {
+      console.warn('Fullscreen request failed:', err);
+    }
+  };
 
   // Active window title
   const activeWindow = windows.find(w => w.id === activeWindowId);
@@ -77,6 +103,8 @@ export const MenuBar: React.FC = () => {
     setActiveMenu(null);
     if (action === 'about') {
       openApp('settings');
+    } else if (action === 'fullscreen') {
+      toggleFullscreen();
     } else if (action === 'settings') {
       openApp('settings');
     } else if (action === 'lock') {
@@ -124,6 +152,10 @@ export const MenuBar: React.FC = () => {
               <div className="h-[1px] bg-white/10 my-1"></div>
               <button onClick={() => handleAppleMenuAction('settings')} className="w-full text-left px-4 py-1.5 hover:bg-sky-500 hover:text-white transition-colors">
                 System Settings...
+              </button>
+              <button onClick={() => handleAppleMenuAction('fullscreen')} className="w-full text-left px-4 py-1.5 hover:bg-sky-500 hover:text-white transition-colors flex justify-between">
+                <span>{isFullscreen ? 'Exit Full Screen' : 'Enter Full Screen'}</span>
+                <span className="opacity-50 text-[10px]">⌃⌘F</span>
               </button>
               <button onClick={() => openApp('activity_monitor')} className="w-full text-left px-4 py-1.5 hover:bg-sky-500 hover:text-white transition-colors flex justify-between">
                 <span>Activity & Thermals</span>
@@ -322,11 +354,36 @@ export const MenuBar: React.FC = () => {
           </div>
         )}
 
-        {/* Wi-Fi & Battery */}
+        {/* Wi-Fi & Battery & Volume */}
         <div className="flex items-center space-x-1 px-1 opacity-80 hidden sm:flex">
           <Wifi className="w-3.5 h-3.5" />
           <BatteryMedium className="w-4 h-4" />
         </div>
+
+        <button
+          onClick={() => setControlCenterOpen(!controlCenterOpen)}
+          title={`Sound Volume: ${settings.volume ?? 85}% | Brightness: ${settings.brightness ?? 100}%`}
+          className="p-1 rounded hover:bg-white/10 transition-colors opacity-80 hover:opacity-100 flex items-center"
+        >
+          {(settings.volume ?? 85) === 0 ? (
+            <VolumeX className="w-3.5 h-3.5 text-rose-400" />
+          ) : (
+            <Volume2 className="w-3.5 h-3.5" />
+          )}
+        </button>
+
+        {/* Fullscreen Toggle Button */}
+        <button
+          onClick={toggleFullscreen}
+          title={isFullscreen ? "Exit Full Screen OS (⌃⌘F)" : "Enter Full Screen OS (⌃⌘F)"}
+          className="p-1 rounded hover:bg-white/10 transition-colors"
+        >
+          {isFullscreen ? (
+            <Minimize2 className="w-3.5 h-3.5 text-sky-400" />
+          ) : (
+            <Maximize2 className="w-3.5 h-3.5 opacity-80 hover:opacity-100" />
+          )}
+        </button>
 
         {/* Spotlight Search Trigger */}
         <button
