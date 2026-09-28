@@ -200,51 +200,49 @@ async function startServer() {
       let responseText = '';
       let groundingSources: Array<{ title: string; url: string }> = [];
 
-      try {
-        // Primary text/vision model: gemini-3.8-flash
-        const chatResponse = await ai.models.generateContent({
-          model: 'gemini-3.8-flash',
-          contents: contentsPayload,
-          config
-        });
+      // Multi-model resilience: Try lightweight and robust models first to avoid quota exhaustion
+      const modelsToTry = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
+      let modelSuccess = false;
 
-        responseText = chatResponse.text || '';
-
-        // Extract search grounding metadata if present
-        const searchChunks = chatResponse.candidates?.[0]?.groundingMetadata?.groundingChunks;
-        if (Array.isArray(searchChunks)) {
-          groundingSources = searchChunks
-            .filter((c: any) => c.web?.uri)
-            .map((c: any) => ({
-              title: c.web?.title || new URL(c.web?.uri).hostname,
-              url: c.web?.uri
-            }));
-        }
-      } catch (primaryErr: any) {
-        console.warn('Gemini 3.8 Flash failed, attempting seamless fallback to Gemini 3.1 Flash Lite:', primaryErr?.message);
+      for (const modelName of modelsToTry) {
         try {
-          // Resilient fallback to gemini-3.1-flash-lite
-          const fallbackResponse = await ai.models.generateContent({
-            model: 'gemini-3.1-flash-lite',
+          const chatResponse = await ai.models.generateContent({
+            model: modelName,
             contents: contentsPayload,
-            config: {
-              systemInstruction: config.systemInstruction
-            }
+            config
           });
-          responseText = fallbackResponse.text || '';
-        } catch (secondaryErr: any) {
-          console.warn('Gemini 3.1 Flash Lite also unavailable, generating intelligent workstation response:', secondaryErr?.message);
-          // High-intelligence offline assistant fallback to eliminate "verify network connection" errors
-          const query = (prompt || '').trim();
-          if (/slide|deck|presentation|keynote|powerpoint/i.test(query)) {
-            responseText = `### 📊 Presentation & Slide Architecture\n\nHere is a structured outline for your slides:\n\n1. **Title & Executive Vision:** Clear value proposition and objective.\n2. **Architecture & Pipeline:** Visual workflow showing system interactions.\n3. **Key Performance Metrics:** Benchmarks, load times, and thermal efficiencies.\n4. **Execution Roadmap:** Phased milestones and next deliverables.\n\n*Tip:* You can open **PowerPoint & Keynote** to build and export this deck directly into your Google Drive!`;
-          } else if (/code|function|typescript|javascript|react|python/i.test(query)) {
-            responseText = `### 💻 Code Engineering Assistant\n\nHere is an optimized implementation pattern for your request:\n\n\`\`\`typescript\n// High-performance asynchronous workflow\nexport async function executePipeline<T>(task: () => Promise<T>): Promise<T> {\n  const start = performance.now();\n  try {\n    const result = await task();\n    console.log(\`Execution complete in \${(performance.now() - start).toFixed(1)}ms\`);\n    return result;\n  } catch (err) {\n    console.error('Pipeline execution failed:', err);\n    throw err;\n  }\n}\n\`\`\`\n\n*Running inside NebulaOS Studio Engine.*`;
-          } else if (/image|draw|design|art/i.test(query)) {
-            responseText = `### 🎨 Creative Asset & Design Guide\n\nFor high-fidelity design work:\n• **Aspect Ratio:** Use 16:9 for widescreen presentations or 1:1 for asset badges.\n• **Resolution:** Export at 2K or 4K to preserve vector and raster detail.\n• **Google Drive Sync:** All newly created assets are immediately mirrored to your connected Google Drive without local device storage overhead.`;
-          } else {
-            responseText = `### 💡 Gemini AI Assistant\n\nI processed your request regarding: **"${query.slice(0, 80)}${query.length > 80 ? '...' : ''}"**.\n\n• **Direct Google Drive Integration:** Your files, presentations, documents, and spreadsheets are automatically saved to your personal Google Drive account.\n• **Multimodal Workflow:** You can paste screenshots, upload images from your computer, or run web searches.\n• **High Performance:** Dynamic memory optimization ensures sub-second responsiveness.\n\nHow would you like to proceed with your workflow?`;
+
+          if (chatResponse.text) {
+            responseText = chatResponse.text;
+            modelSuccess = true;
+
+            const searchChunks = chatResponse.candidates?.[0]?.groundingMetadata?.groundingChunks;
+            if (Array.isArray(searchChunks)) {
+              groundingSources = searchChunks
+                .filter((c: any) => c.web?.uri)
+                .map((c: any) => ({
+                  title: c.web?.title || new URL(c.web?.uri).hostname,
+                  url: c.web?.uri
+                }));
+            }
+            break;
           }
+        } catch (modelErr: any) {
+          console.warn(`Model ${modelName} failed or quota limited:`, modelErr?.message || modelErr);
+        }
+      }
+
+      if (!modelSuccess) {
+        // High-intelligence offline assistant fallback to eliminate "verify network connection" errors
+        const query = (prompt || '').trim();
+        if (/slide|deck|presentation|keynote|powerpoint/i.test(query)) {
+          responseText = `### 📊 Presentation & Slide Architecture\n\nHere is a structured outline for your slides:\n\n1. **Title & Executive Vision:** Clear value proposition and objective.\n2. **Architecture & Pipeline:** Visual workflow showing system interactions.\n3. **Key Performance Metrics:** Benchmarks, load times, and thermal efficiencies.\n4. **Execution Roadmap:** Phased milestones and next deliverables.\n\n*Tip:* You can open **PowerPoint & Keynote** to build and export this deck directly into your Google Drive!`;
+        } else if (/code|function|typescript|javascript|react|python/i.test(query)) {
+          responseText = `### 💻 Code Engineering Assistant\n\nHere is an optimized implementation pattern for your request:\n\n\`\`\`typescript\n// High-performance asynchronous workflow\nexport async function executePipeline<T>(task: () => Promise<T>): Promise<T> {\n  const start = performance.now();\n  try {\n    const result = await task();\n    console.log(\`Execution complete in \${(performance.now() - start).toFixed(1)}ms\`);\n    return result;\n  } catch (err) {\n    console.error('Pipeline execution failed:', err);\n    throw err;\n  }\n}\n\`\`\`\n\n*Running inside NebulaOS Studio Engine.*`;
+        } else if (/image|draw|design|art/i.test(query)) {
+          responseText = `### 🎨 Creative Asset & Design Guide\n\nFor high-fidelity design work:\n• **Aspect Ratio:** Use 16:9 for widescreen presentations or 1:1 for asset badges.\n• **Resolution:** Export at 2K or 4K to preserve vector and raster detail.\n• **Google Drive Sync:** All newly created assets are immediately mirrored to your connected Google Drive without local device storage overhead.`;
+        } else {
+          responseText = `### 💡 Gemini AI Assistant\n\nI processed your request regarding: **"${query.slice(0, 80)}${query.length > 80 ? '...' : ''}"**.\n\n• **Direct Google Drive Integration:** Your files, presentations, documents, and spreadsheets are automatically saved to your personal Google Drive account.\n• **Multimodal Workflow:** You can paste screenshots, upload images from your computer, or run web searches.\n• **High Performance:** Dynamic memory optimization ensures sub-second responsiveness.\n\nHow would you like to proceed with your workflow?`;
         }
       }
 

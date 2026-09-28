@@ -71,6 +71,12 @@ export const GoogleDocsApp: React.FC<GoogleDocsAppProps> = ({
   const [content, setContent] = useState<string>(initialContent || activeFile?.content || '');
   const [isSaved, setIsSaved] = useState<boolean>(true);
 
+  useEffect(() => {
+    if (initialFileName) setTitle(initialFileName);
+    if (initialContent !== undefined) setContent(initialContent);
+    if (initialFileId) setFileId(initialFileId);
+  }, [initialFileName, initialContent, initialFileId]);
+
   // Document Images State
   const [images, setImages] = useState<DocImage[]>([]);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);

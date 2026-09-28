@@ -49,6 +49,7 @@ export interface SheetImage {
 interface GoogleSheetsAppProps {
   initialFileId?: string;
   initialFileName?: string;
+  initialContent?: string;
 }
 
 interface SheetTab {
@@ -60,7 +61,8 @@ interface SheetTab {
 
 export const GoogleSheetsApp: React.FC<GoogleSheetsAppProps> = ({ 
   initialFileId, 
-  initialFileName 
+  initialFileName,
+  initialContent
 }) => {
   const { files, updateFile, createFile, user, notify, settings } = useOS();
 
@@ -134,6 +136,28 @@ export const GoogleSheetsApp: React.FC<GoogleSheetsAppProps> = ({
       }
     }
   }, [initialFileId, files]);
+
+  useEffect(() => {
+    if (initialFileName) setTitle(initialFileName);
+    if (initialContent) {
+      try {
+        const parsed = JSON.parse(initialContent);
+        if (parsed.sheets && Array.isArray(parsed.sheets)) setSheets(parsed.sheets);
+        else if (parsed.rows && parsed.headers) {
+          setSheets([{ id: 'sheet-1', name: 'Sheet 1', headers: parsed.headers, rows: parsed.rows }]);
+        }
+      } catch {
+        const lines = initialContent.split('\n').filter(l => l.trim().length > 0);
+        if (lines.length > 0) {
+          const rows = lines.map(line => line.split(',').map(cell => cell.trim().replace(/^"|"$/g, '')));
+          const headers = rows[0] || defaultBlankHeaders;
+          const dataRows = rows.slice(1);
+          setSheets([{ id: 'sheet-1', name: 'Sheet 1', headers, rows: dataRows.length ? dataRows : generateBlankRows(10, headers.length) }]);
+        }
+      }
+      setIsSaved(true);
+    }
+  }, [initialFileName, initialContent]);
 
   // Sync active cell to formula bar
   useEffect(() => {

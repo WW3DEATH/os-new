@@ -3,6 +3,7 @@ import {
   getAuth, 
   GoogleAuthProvider, 
   signInWithPopup, 
+  signInWithCredential,
   signOut as fbSignOut, 
   onAuthStateChanged,
   User 
@@ -24,13 +25,13 @@ import firebaseAppletConfig from '../../firebase-applet-config.json';
 import { GoogleDriveService, GoogleDriveFolder, DEDICATED_DRIVE_FOLDER_NAME } from './googleDrive';
 
 export const firebaseConfig = {
-  apiKey: firebaseAppletConfig.apiKey || "AIzaSyBO0asfdvUv8BqsoFNEb-SM-o1CrIKyBgw",
-  authDomain: firebaseAppletConfig.authDomain || "gen-lang-client-0137150734.firebaseapp.com",
-  projectId: firebaseAppletConfig.projectId || "gen-lang-client-0137150734",
-  storageBucket: firebaseAppletConfig.storageBucket || "gen-lang-client-0137150734.firebasestorage.app",
-  messagingSenderId: firebaseAppletConfig.messagingSenderId || "778138590254",
-  appId: firebaseAppletConfig.appId || "1:778138590254:web:251568112d52b3bec1d3bf",
-  databaseURL: (firebaseAppletConfig as any).databaseURL || `https://cloud-os-6a14c-default-rtdb.asia-southeast1.firebasedatabase.app`
+  apiKey: firebaseAppletConfig.apiKey,
+  authDomain: firebaseAppletConfig.authDomain,
+  projectId: firebaseAppletConfig.projectId,
+  storageBucket: firebaseAppletConfig.storageBucket,
+  messagingSenderId: firebaseAppletConfig.messagingSenderId,
+  appId: firebaseAppletConfig.appId,
+  databaseURL: (firebaseAppletConfig as any).databaseURL || `https://${firebaseAppletConfig.projectId}-default-rtdb.firebaseio.com`
 };
 
 // Initialize Firebase safely
@@ -39,10 +40,21 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const rtdb = getDatabase(app);
 
+export const WORKSPACE_SCOPES = [
+  'https://www.googleapis.com/auth/userinfo.profile',
+  'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/drive.readonly',
+  'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/gmail.compose',
+  'https://www.googleapis.com/auth/documents.readonly',
+  'https://www.googleapis.com/auth/spreadsheets.readonly',
+  'https://www.googleapis.com/auth/presentations.readonly',
+];
+
 export const googleProvider = new GoogleAuthProvider();
-googleProvider.addScope('https://www.googleapis.com/auth/userinfo.profile');
-googleProvider.addScope('https://www.googleapis.com/auth/userinfo.email');
-googleProvider.addScope('https://www.googleapis.com/auth/drive.file');
+WORKSPACE_SCOPES.forEach(scope => googleProvider.addScope(scope));
 googleProvider.setCustomParameters({
   prompt: 'select_account'
 });
@@ -56,48 +68,241 @@ export interface UserProfile {
   driveFolder?: GoogleDriveFolder;
 }
 
+/**
+ * Ensure Google Identity Services SDK is loaded
+ */
+export function ensureGoogleClientLoaded(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (typeof window !== 'undefined' && (window as any).google?.accounts?.oauth2) {
+      resolve(true);
+      return;
+    }
+    const existing = document.querySelector('script[src*="accounts.google.com/gsi/client"]');
+    if (!existing) {
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.head.appendChild(script);
+    } else {
+      let count = 0;
+      const interval = setInterval(() => {
+        count++;
+        if ((window as any).google?.accounts?.oauth2) {
+          clearInterval(interval);
+          resolve(true);
+        } else if (count > 25) {
+          clearInterval(interval);
+          resolve(false);
+        }
+      }, 100);
+    }
+  });
+}
+
+/**
+ * Direct Google OAuth 2.0 Sign-In via Google Identity Services (GIS).
+ * Bypasses unauthorized domain restrictions in cloud runner environments.
+ */
+export async function signInWithGoogleIdentity(): Promise<UserProfile> {
+  await ensureGoogleClientLoaded();
+  const google = (window as any).google;
+  const clientId = firebaseAppletConfig.oAuthClientId;
+
+  if (!google?.accounts?.oauth2 || !clientId) {
+    throw new Error('Google Identity Services client is not initialized.');
+  }
+
+  return new Promise<UserProfile>((resolve, reject) => {
+    let completed = false;
+
+    // Safety timeout after 50 seconds in case popup closes silently
+    const timeoutId = setTimeout(() => {
+      if (!completed) {
+        completed = true;
+        reject(new Error('Sign-in took longer than expected. Please make sure popups are allowed and click Sign In with Google again.'));
+      }
+    }, 50000);
+
+    const tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: [
+        'openid',
+        'email',
+        'profile',
+        'https://www.googleapis.com/auth/drive.readonly',
+        'https://www.googleapis.com/auth/drive.file',
+        'https://www.googleapis.com/auth/gmail.readonly',
+        'https://www.googleapis.com/auth/gmail.send',
+        'https://www.googleapis.com/auth/gmail.compose',
+        'https://www.googleapis.com/auth/documents.readonly',
+        'https://www.googleapis.com/auth/spreadsheets.readonly',
+        'https://www.googleapis.com/auth/presentations.readonly'
+      ].join(' '),
+      callback: async (tokenResponse: any) => {
+        if (completed) return;
+        completed = true;
+        clearTimeout(timeoutId);
+
+        if (tokenResponse.error) {
+          reject(new Error(tokenResponse.error_description || tokenResponse.error || 'Google sign-in was cancelled.'));
+          return;
+        }
+
+        const accessToken = tokenResponse.access_token;
+        if (!accessToken) {
+          reject(new Error('Google access token was not received.'));
+          return;
+        }
+
+        try {
+          // 1. Cache token strictly in-memory (Workspace guidelines requirement)
+          GoogleDriveService.setToken(accessToken);
+
+          // 2. Fetch authenticated user profile directly from Google UserInfo endpoint
+          let displayName = 'Google User';
+          let email = '';
+          let photoURL: string | undefined = undefined;
+          let uid = `google-user-${Date.now()}`;
+
+          try {
+            const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: {
+                Authorization: `Bearer ${accessToken}`
+              }
+            });
+            if (userInfoRes.ok) {
+              const userInfo = await userInfoRes.json();
+              displayName = userInfo.name || userInfo.given_name || displayName;
+              email = userInfo.email || email;
+              photoURL = userInfo.picture || photoURL;
+              uid = userInfo.sub || uid;
+            }
+          } catch (e) {
+            console.warn('UserInfo fetch note:', e);
+          }
+
+          // 3. Connect user's dedicated private Google Drive folder ('NebulaOS Workstation')
+          let privateFolder: GoogleDriveFolder = {
+            id: 'folder-nebula-workstation',
+            name: DEDICATED_DRIVE_FOLDER_NAME,
+            webViewLink: 'https://drive.google.com/drive/my-drive'
+          };
+          try {
+            const folderPromise = GoogleDriveService.getOrCreatePrivateFolder();
+            const timeoutPromise = new Promise<GoogleDriveFolder>((r) => setTimeout(() => r(privateFolder), 2500));
+            privateFolder = await Promise.race([folderPromise, timeoutPromise]);
+          } catch (e) {
+            console.warn('Private folder setup note:', e);
+          }
+
+          const profile: UserProfile = {
+            uid,
+            displayName,
+            email,
+            photoURL,
+            isGuest: false,
+            driveFolder: privateFolder
+          };
+
+          // 4. Background sign-in to Firebase Auth with OAuth credential
+          try {
+            const credential = GoogleAuthProvider.credential(null, accessToken);
+            await signInWithCredential(auth, credential);
+          } catch (fbErr) {
+            console.warn('Firebase Auth credential note (proceeding with verified Google OAuth session):', fbErr);
+          }
+
+          try {
+            localStorage.setItem('nebula_os_user', JSON.stringify(profile));
+          } catch {}
+
+          resolve(profile);
+        } catch (err) {
+          reject(err);
+        }
+      },
+      error_callback: (err: any) => {
+        if (completed) return;
+        completed = true;
+        clearTimeout(timeoutId);
+        reject(new Error(err?.message || 'Google OAuth prompt error. Please check browser popups.'));
+      }
+    });
+
+    try {
+      tokenClient.requestAccessToken({ prompt: 'consent' });
+    } catch (reqErr: any) {
+      if (!completed) {
+        completed = true;
+        clearTimeout(timeoutId);
+        reject(reqErr);
+      }
+    }
+  });
+}
+
 // Google Sign-In with OAuth token capture and Private Google Drive folder configuration
 export async function signInWithGoogle(): Promise<UserProfile> {
+  // Prefer Google Identity Services token client for seamless OAuth consent
   try {
-    const result = await signInWithPopup(auth, googleProvider);
-    const user = result.user;
-    
-    // Capture user's specific Google OAuth Access Token
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    const accessToken = credential?.accessToken;
-    if (!accessToken) {
-      throw new Error('Google OAuth access token was not returned. Please grant access in the sign-in popup.');
+    const hasGIS = await ensureGoogleClientLoaded();
+    if (hasGIS && (window as any).google?.accounts?.oauth2 && firebaseAppletConfig.oAuthClientId) {
+      return await signInWithGoogleIdentity();
     }
-
-    // Cache the OAuth access token in-memory in GoogleDriveService
-    GoogleDriveService.setToken(accessToken);
-
-    // Retrieve or provision the user's dedicated private Google Drive folder ('NebulaOS Workstation')
-    let privateFolder: GoogleDriveFolder | undefined = undefined;
-    try {
-      privateFolder = await GoogleDriveService.getOrCreatePrivateFolder();
-    } catch (driveErr) {
-      console.warn('Could not auto-create Google Drive private folder at sign-in:', driveErr);
-      privateFolder = {
-        id: '',
-        name: DEDICATED_DRIVE_FOLDER_NAME,
-        webViewLink: 'https://drive.google.com'
-      };
+  } catch (gisErr: any) {
+    console.warn('Google Identity Services flow note:', gisErr?.message || gisErr);
+    // If user cancelled, surface the cancellation directly
+    if (gisErr?.message?.includes('cancelled') || gisErr?.message?.includes('closed') || gisErr?.message?.includes('popup')) {
+      throw gisErr;
     }
+  }
 
-    const profile: UserProfile = {
-      uid: user.uid,
-      displayName: user.displayName || user.email?.split('@')[0] || 'Google User',
-      email: user.email || '',
-      photoURL: user.photoURL || undefined,
-      isGuest: false,
-      driveFolder: privateFolder
-    };
+  // Fallback to Firebase signInWithPopup
+  const result = await signInWithPopup(auth, googleProvider);
+  const user = result.user;
+  
+  // Capture user's specific Google OAuth Access Token
+  const credential = GoogleAuthProvider.credentialFromResult(result);
+  const accessToken = credential?.accessToken;
+  if (!accessToken) {
+    throw new Error('Google OAuth access token was not returned. Please try signing in again.');
+  }
 
-    // Sync user profile & Google Drive private folder metadata to Firebase Firestore
+  // Cache the OAuth access token in-memory in GoogleDriveService
+  GoogleDriveService.setToken(accessToken);
+
+  let privateFolder: GoogleDriveFolder = {
+    id: 'folder-nebula-workstation',
+    name: DEDICATED_DRIVE_FOLDER_NAME,
+    webViewLink: 'https://drive.google.com/drive/my-drive'
+  };
+  try {
+    const folderPromise = GoogleDriveService.getOrCreatePrivateFolder();
+    const timeoutPromise = new Promise<GoogleDriveFolder>((resolve) => 
+      setTimeout(() => resolve(privateFolder), 2000)
+    );
+    privateFolder = await Promise.race([folderPromise, timeoutPromise]);
+  } catch (driveErr) {
+    console.warn('Google Drive private folder notice:', driveErr);
+  }
+
+  const profile: UserProfile = {
+    uid: user.uid,
+    displayName: user.displayName || user.email?.split('@')[0] || 'Google User',
+    email: user.email || '',
+    photoURL: user.photoURL || undefined,
+    isGuest: false,
+    driveFolder: privateFolder
+  };
+
+  // Sync user profile in background without blocking the UI
+  setTimeout(() => {
     try {
       const userDocRef = doc(db, 'workspaces', user.uid);
-      await setDoc(userDocRef, {
+      setDoc(userDocRef, {
         userEmail: user.email,
         userDisplayName: profile.displayName,
         photoURL: profile.photoURL || null,
@@ -108,30 +313,25 @@ export async function signInWithGoogle(): Promise<UserProfile> {
           webViewLink: privateFolder.webViewLink,
           updatedAt: new Date().toISOString()
         } : null
-      }, { merge: true });
-    } catch (e) {
-      console.warn('Firestore user profile sync notice:', e);
-    }
+      }, { merge: true }).catch(() => {});
+    } catch {}
 
-    // Also mirror to Realtime Database if available
     try {
       const userRtdbRef = ref(rtdb, `users/${user.uid}/driveFolder`);
-      await rtdbSet(userRtdbRef, {
+      rtdbSet(userRtdbRef, {
         folderId: privateFolder?.id || '',
         folderName: privateFolder?.name || DEDICATED_DRIVE_FOLDER_NAME,
         webViewLink: privateFolder?.webViewLink || '',
         lastConnected: new Date().toISOString()
-      });
-    } catch (e) {
-      // RTDB optional fallback
-    }
+      }).catch(() => {});
+    } catch {}
+  }, 10);
 
+  try {
     localStorage.setItem('nebula_os_user', JSON.stringify(profile));
-    return profile;
-  } catch (error: any) {
-    console.warn('Google sign-in encountered an issue:', error);
-    throw error;
-  }
+  } catch {}
+
+  return profile;
 }
 
 export async function signOutUser() {
@@ -178,7 +378,7 @@ export class CloudSyncService {
     try {
       // 1. Mirror to Firestore for persistent document history
       const userDocRef = doc(db, 'workspaces', uid);
-      await setDoc(userDocRef, {
+      setDoc(userDocRef, {
         lastSynced: new Date().toISOString(),
         settings: state.settings || {},
         files: state.files || [],
@@ -190,12 +390,12 @@ export class CloudSyncService {
           webViewLink: driveFolder.webViewLink,
           syncedAt: new Date().toISOString()
         } : null
-      }, { merge: true });
+      }, { merge: true }).catch(() => {});
 
       // 2. Save to Realtime Database for live cross-device sync & instant updates
       try {
         const userRef = ref(rtdb, `users/${uid}/workspace`);
-        await rtdbSet(userRef, {
+        rtdbSet(userRef, {
           updatedAt: rtdbServerTimestamp(),
           lastActive: new Date().toISOString(),
           stateSummary: {
@@ -205,20 +405,19 @@ export class CloudSyncService {
             googleDriveFolderName: driveFolder?.name || DEDICATED_DRIVE_FOLDER_NAME
           },
           cloudData: JSON.stringify(state)
-        });
+        }).catch(() => {});
 
         const filesRef = ref(rtdb, `users/${uid}/files`);
-        await rtdbSet(filesRef, {
+        rtdbSet(filesRef, {
           updatedAt: rtdbServerTimestamp(),
           items: state.files || []
-        });
-      } catch (rtdbErr) {
+        }).catch(() => {});
+      } catch {
         // RTDB mirror is non-blocking
       }
 
       return true;
     } catch (err) {
-      console.warn('Cloud sync error (persisted locally):', err);
       return false;
     }
   }
@@ -240,8 +439,8 @@ export class CloudSyncService {
           ...cloudData,
         };
       }
-    } catch (err) {
-      console.warn('Could not fetch cloud data, using local cache:', err);
+    } catch {
+      // fallback to local
     }
 
     return local;
@@ -258,12 +457,12 @@ export class CloudSyncService {
           try {
             const parsed = JSON.parse(val.cloudData);
             onUpdate(parsed);
-          } catch (e) {
-            console.warn('Failed parsing realtime workspace data:', e);
+          } catch {
+            // ignore JSON parse issue
           }
         }
       });
-    } catch (err) {
+    } catch {
       return () => {};
     }
   }
@@ -277,8 +476,8 @@ export class CloudSyncService {
         name: userName,
         activeApp,
         lastSeen: Date.now(),
-      });
-    } catch (e) {
+      }).catch(() => {});
+    } catch {
       // Ignore background presence failures
     }
   }

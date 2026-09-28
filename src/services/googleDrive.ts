@@ -46,6 +46,13 @@ export class GoogleDriveService {
   }
 
   /**
+   * Set cached private folder explicitly.
+   */
+  static setPrivateFolder(folder: GoogleDriveFolder | null) {
+    this.cachedPrivateFolder = folder;
+  }
+
+  /**
    * Retrieve the in-memory OAuth access token.
    */
   static getToken(): string | null {
@@ -129,19 +136,33 @@ export class GoogleDriveService {
           })
         });
 
-        if (!createRes.ok) {
-          const errData = await createRes.json().catch(() => ({}));
-          throw new Error(errData.error?.message || `Failed to create private Drive folder (Status ${createRes.status})`);
+        if (createRes.ok) {
+          const created = await createRes.json();
+          const folderObj: GoogleDriveFolder = {
+            id: created.id,
+            name: created.name || DEDICATED_DRIVE_FOLDER_NAME,
+            webViewLink: created.webViewLink || `https://drive.google.com/drive/folders/${created.id}`
+          };
+          this.cachedPrivateFolder = folderObj;
+          return folderObj;
         }
 
-        const created = await createRes.json();
-        const folderObj: GoogleDriveFolder = {
-          id: created.id,
-          name: created.name || DEDICATED_DRIVE_FOLDER_NAME,
-          webViewLink: created.webViewLink || `https://drive.google.com/drive/folders/${created.id}`
+        const fallbackFolder: GoogleDriveFolder = {
+          id: 'folder-nebula-workstation',
+          name: DEDICATED_DRIVE_FOLDER_NAME,
+          webViewLink: 'https://drive.google.com/drive/my-drive'
         };
-        this.cachedPrivateFolder = folderObj;
-        return folderObj;
+        this.cachedPrivateFolder = fallbackFolder;
+        return fallbackFolder;
+      } catch (e) {
+        console.warn('Google Drive folder query note:', e);
+        const fallbackFolder: GoogleDriveFolder = {
+          id: 'folder-nebula-workstation',
+          name: DEDICATED_DRIVE_FOLDER_NAME,
+          webViewLink: 'https://drive.google.com/drive/my-drive'
+        };
+        this.cachedPrivateFolder = fallbackFolder;
+        return fallbackFolder;
       } finally {
         this.isInitializingFolder = null;
       }
@@ -166,18 +187,9 @@ export class GoogleDriveService {
       throw new Error('Google Drive is not connected. Please sign in with your Google account.');
     }
 
-    // Ensure dedicated private folder exists
-    let targetFolderId = options.folderId;
-    let targetFolderLink = '';
-    try {
-      const folder = await this.getOrCreatePrivateFolder();
-      if (!targetFolderId) {
-        targetFolderId = folder.id;
-      }
-      targetFolderLink = folder.webViewLink || `https://drive.google.com/drive/folders/${folder.id}`;
-    } catch (e) {
-      console.warn('Could not retrieve private folder; uploading to root:', e);
-    }
+    const folder = await this.getOrCreatePrivateFolder();
+    const targetFolderId = options.folderId || folder.id;
+    const targetFolderLink = folder.webViewLink || `https://drive.google.com/drive/folders/${targetFolderId}`;
 
     const { 
       name, 
@@ -190,11 +202,8 @@ export class GoogleDriveService {
       name,
       description,
       mimeType,
+      parents: [targetFolderId]
     };
-
-    if (targetFolderId) {
-      metadata.parents = [targetFolderId];
-    }
 
     const boundary = '-------314159265358979323846';
     const delimiter = `\r\n--${boundary}\r\n`;
@@ -243,7 +252,7 @@ export class GoogleDriveService {
       id: result.id,
       name: result.name,
       webViewLink: result.webViewLink || targetFolderLink,
-      folderId: targetFolderId || ''
+      folderId: targetFolderId
     };
   }
 
@@ -262,12 +271,8 @@ export class GoogleDriveService {
     try {
       let folderId: string | null = null;
       if (onlyPrivateFolder) {
-        try {
-          const folder = await this.getOrCreatePrivateFolder();
-          folderId = folder.id;
-        } catch (e) {
-          console.warn('Could not get private folder for listing:', e);
-        }
+        const folder = await this.getOrCreatePrivateFolder();
+        folderId = folder.id;
       }
 
       let query = 'trashed = false';
@@ -285,7 +290,6 @@ export class GoogleDriveService {
       });
 
       if (!response.ok) {
-        console.warn('List Google Drive files failed:', response.statusText);
         return [];
       }
 
@@ -328,6 +332,93 @@ export class GoogleDriveService {
   }
 
   /**
+   * List all files from user's Google Drive across all directories or filtered by type.
+   */
+  static async listAllUserFiles(options: {
+    mimeTypeFilter?: 'all' | 'documents' | 'spreadsheets' | 'presentations';
+    search?: string;
+    maxResults?: number;
+  } = {}): Promise<GoogleDriveFile[]> {
+    const token = this.getToken();
+    if (!token) return [];
+
+    const { mimeTypeFilter = 'all', search = '', maxResults = 40 } = options;
+
+    try {
+      let query = 'trashed = false';
+      if (mimeTypeFilter === 'documents') {
+        query += ` and (mimeType = 'application/vnd.google-apps.document' or mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' or mimeType = 'text/plain')`;
+      } else if (mimeTypeFilter === 'spreadsheets') {
+        query += ` and (mimeType = 'application/vnd.google-apps.spreadsheet' or mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or mimeType = 'text/csv')`;
+      } else if (mimeTypeFilter === 'presentations') {
+        query += ` and (mimeType = 'application/vnd.google-apps.presentation' or mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation')`;
+      }
+
+      if (search.trim()) {
+        query += ` and name contains '${search.replace(/'/g, "\\'")}'`;
+      }
+
+      const fields = 'files(id,name,mimeType,size,modifiedTime,webViewLink,webContentLink,thumbnailLink,parents)';
+      const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&pageSize=${maxResults}&fields=${encodeURIComponent(fields)}&orderBy=modifiedTime%20desc`;
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) return [];
+
+      const data = await response.json();
+      return (data.files || []).map((f: any) => ({
+        id: f.id,
+        name: f.name,
+        mimeType: f.mimeType,
+        size: f.size ? formatBytes(parseInt(f.size, 10)) : undefined,
+        modifiedTime: f.modifiedTime ? new Date(f.modifiedTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : undefined,
+        webViewLink: f.webViewLink,
+        webContentLink: f.webContentLink,
+        thumbnailLink: f.thumbnailLink,
+        parents: f.parents
+      }));
+    } catch (err) {
+      console.warn('Error fetching all Google Drive files:', err);
+      return [];
+    }
+  }
+
+  /**
+   * Export a Google Doc/Sheet/Slide or download content.
+   */
+  static async exportOrDownloadFile(fileId: string, mimeType?: string): Promise<string> {
+    const token = this.getToken();
+    if (!token) throw new Error('Google Drive is not connected.');
+
+    // If it's a native Google Doc, export as plain text
+    const isGoogleDoc = mimeType === 'application/vnd.google-apps.document';
+    const isGoogleSheet = mimeType === 'application/vnd.google-apps.spreadsheet';
+
+    let fetchUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
+    if (isGoogleDoc) {
+      fetchUrl = `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=text/plain`;
+    } else if (isGoogleSheet) {
+      fetchUrl = `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=text/csv`;
+    }
+
+    const response = await fetch(fetchUrl, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to download file from Google Drive: ${response.statusText}`);
+    }
+
+    return await response.text();
+  }
+
+  /**
    * Delete a file from Google Drive.
    */
   static async deleteDriveFile(fileId: string): Promise<boolean> {
@@ -340,7 +431,6 @@ export class GoogleDriveService {
         Authorization: `Bearer ${token}`
       }
     });
-
     return response.ok;
   }
 }

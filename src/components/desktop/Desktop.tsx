@@ -60,8 +60,8 @@ export const Desktop: React.FC = () => {
     return () => window.removeEventListener('click', handleCloseMenu);
   }, []);
 
-  // Strict Google OAuth Gate: User MUST be signed in with Google AND possess a valid OAuth token
-  if (isLocked || !user || !GoogleDriveService.isConnected()) {
+  // Strict Lock Gate: User MUST be signed in with Google
+  if (isLocked || !user) {
     return <LockScreen />;
   }
 

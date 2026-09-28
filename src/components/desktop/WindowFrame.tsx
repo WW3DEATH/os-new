@@ -133,7 +133,7 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({ window: win }) => {
       case 'gdocs':
         return <GoogleDocsApp initialFileId={win.data?.fileId} initialFileName={win.data?.fileName} initialContent={win.data?.content} />;
       case 'gsheets':
-        return <GoogleSheetsApp initialFileId={win.data?.fileId} initialFileName={win.data?.fileName} />;
+        return <GoogleSheetsApp initialFileId={win.data?.fileId} initialFileName={win.data?.fileName} initialContent={win.data?.content} />;
       case 'keynote':
         return <KeynoteApp initialFileId={win.data?.fileId} initialFileName={win.data?.fileName} />;
       case 'creative_studio':
