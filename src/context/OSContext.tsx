@@ -44,6 +44,7 @@ interface OSContextType {
   isLocked: boolean;
   setLocked: (locked: boolean) => void;
   loginWithGoogle: () => Promise<void>;
+  loginAsGuest: () => void;
   logout: () => Promise<void>;
   
   // Windows
@@ -140,13 +141,13 @@ const APP_METADATA: Record<AppId, { title: string; icon: string; width: number; 
 };
 
 export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Authentication & Lock Screen - STRICT GOOGLE SIGN-IN ONLY, NO BYPASS
+  // Authentication & Workstation Access State
   const [user, setUser] = useState<UserProfile | null>(() => {
     try {
       const saved = localStorage.getItem('nebula_os_user');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && parsed.email && !parsed.isGuest && parsed.uid !== 'creative-producer-lead') {
+        if (parsed && parsed.email) {
           return parsed;
         }
       }
@@ -156,9 +157,18 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     return null;
   });
 
-  // Workstation opens locked behind login screen overlay until user authenticates with Google OAuth
+  // Workstation locks by default until unlocked via Google sign-in or Studio Guest Mode
   const [isLocked, setLocked] = useState<boolean>(() => {
-    return !GoogleDriveService.isConnected();
+    try {
+      const saved = localStorage.getItem('nebula_os_user');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && (parsed.isGuest || GoogleDriveService.isConnected())) {
+          return false;
+        }
+      }
+    } catch {}
+    return true;
   });
 
   // System Settings
@@ -301,7 +311,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     };
   }, []);
 
-  // Login Handlers - Strict Google Sign-In ONLY
+  // Login Handlers - Google Sign-In and Creator Studio Guest Mode
   const loginWithGoogle = async () => {
     try {
       setSyncStatus('syncing');
@@ -315,6 +325,22 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       throw err;
     }
   };
+
+  const loginAsGuest = useCallback(() => {
+    const guestProfile: UserProfile = {
+      uid: 'studio-guest-creator',
+      displayName: 'Nebula Pro Creator',
+      email: 'creator@nebulaos.local',
+      isGuest: true,
+    };
+    setUser(guestProfile);
+    setLocked(false);
+    try {
+      localStorage.setItem('nebula_os_user', JSON.stringify(guestProfile));
+    } catch {}
+    sounds.playChime();
+    notify('Workstation Unlocked', 'Welcome to NebulaOS Desktop Pro! Creator Studio mode active.', 'info');
+  }, [notify]);
 
   const logout = async () => {
     await signOutUser();
@@ -815,6 +841,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         isLocked,
         setLocked,
         loginWithGoogle,
+        loginAsGuest,
         logout,
         windows,
         activeWindowId,

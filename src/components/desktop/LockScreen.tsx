@@ -12,17 +12,22 @@ import {
   FolderLock,
   Moon,
   RotateCcw,
-  AlertCircle
+  AlertCircle,
+  Sparkles,
+  Copy,
+  Check,
+  ExternalLink
 } from 'lucide-react';
 import { sounds } from '../../utils/sound';
 
 export const LockScreen: React.FC = () => {
-  const { user, loginWithGoogle, settings } = useOS();
+  const { user, loginWithGoogle, loginAsGuest, settings } = useOS();
   const [currentTime, setCurrentTime] = useState('');
   const [currentDate, setCurrentDate] = useState('');
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAsleep, setIsAsleep] = useState(false);
+  const [domainCopied, setDomainCopied] = useState(false);
 
   useEffect(() => {
     const updateTime = () => {
@@ -195,17 +200,56 @@ export const LockScreen: React.FC = () => {
 
           {/* Authentication Error Banner */}
           {authError && (
-            <div className="p-3 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-200 text-xs text-left flex items-start space-x-2.5">
-              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <div className="font-semibold text-amber-300">Sign-In Note</div>
-                <div className="leading-relaxed opacity-90">{authError}</div>
+            <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-200 text-xs text-left space-y-2.5">
+              <div className="flex items-start space-x-2.5">
+                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <div className="font-semibold text-amber-300">Sign-In Note</div>
+                  <div className="leading-relaxed opacity-90">{authError}</div>
+                </div>
               </div>
+
+              {/* One-Click Authorized Domain Copy & Firebase Console Helper */}
+              {authError.includes('authorized') && typeof window !== 'undefined' && (
+                <div className="pt-2 border-t border-amber-500/20 space-y-2">
+                  <div className="text-[11px] text-amber-300/90 font-medium">
+                    To enable Google Sign-In, add this preview domain to Firebase:
+                  </div>
+                  <div className="flex items-center justify-between p-2 rounded-xl bg-black/40 border border-amber-500/20 text-[11px] font-mono break-all gap-2">
+                    <span className="truncate select-all text-white/90">{window.location.hostname}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(window.location.hostname);
+                        setDomainCopied(true);
+                        setTimeout(() => setDomainCopied(false), 2500);
+                      }}
+                      className="shrink-0 px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center gap-1 transition-colors cursor-pointer text-[10px]"
+                    >
+                      {domainCopied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{domainCopied ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-1 text-[11px]">
+                    <a
+                      href="https://console.firebase.google.com/project/gen-lang-client-0942011552/authentication/settings"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-sky-400 hover:text-sky-300 hover:underline font-medium"
+                    >
+                      <span>Open Firebase Console</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                    <span className="text-white/50 text-[10px]">Settings &gt; Authorized domains</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Primary Action: Official Sign In with Google */}
-          <div className="pt-1">
+          {/* Action Buttons: Sign in with Google OR Continue as Guest */}
+          <div className="pt-1 space-y-2.5">
             <button
               onClick={handleGoogleSignIn}
               disabled={isAuthenticating}
@@ -238,6 +282,16 @@ export const LockScreen: React.FC = () => {
                   ? 'Connecting Google Account...'
                   : 'Sign In with Google'}
               </span>
+            </button>
+
+            {/* Instant Workstation Access: Creator Studio Mode */}
+            <button
+              type="button"
+              onClick={() => loginAsGuest()}
+              className="w-full py-3 px-4 rounded-2xl bg-neutral-800 hover:bg-neutral-700/80 border border-white/15 text-white font-medium text-xs sm:text-sm flex items-center justify-center space-x-2 shadow-lg active:scale-[0.98] transition-all cursor-pointer group"
+            >
+              <Sparkles className="w-4 h-4 text-amber-400 group-hover:rotate-12 transition-transform" />
+              <span>Enter Workstation (Studio Mode)</span>
             </button>
 
             {isAuthenticating && (
