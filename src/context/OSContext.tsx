@@ -139,6 +139,8 @@ const APP_METADATA: Record<AppId, { title: string; icon: string; width: number; 
   tasks: { title: 'Google Tasks & Sprints', icon: 'check-square', width: 720, height: 520, minWidth: 460, minHeight: 340 },
   calculator: { title: 'Calculator', icon: 'calculator', width: 340, height: 460, minWidth: 320, minHeight: 420 },
   trash: { title: 'Trash', icon: 'trash-2', width: 680, height: 440, minWidth: 480, minHeight: 320 },
+  image_editor: { title: 'Photo Studio & Image Editor', icon: 'image', width: 1040, height: 680, minWidth: 680, minHeight: 460 },
+  video_player: { title: 'QuickTime & Video Player', icon: 'video', width: 960, height: 640, minWidth: 580, minHeight: 400 },
 };
 
 export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

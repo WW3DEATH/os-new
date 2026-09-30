@@ -16,7 +16,9 @@ export type AppId =
   | 'notes'
   | 'tasks'
   | 'calculator'
-  | 'trash';
+  | 'trash'
+  | 'image_editor'
+  | 'video_player';
 
 export interface WindowState {
   id: string;

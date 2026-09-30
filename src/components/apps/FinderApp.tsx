@@ -78,7 +78,11 @@ export const FinderApp: React.FC = () => {
       openApp('gdocs', { fileId: file.id, fileName: file.name, content: file.content });
     } else if (file.type === 'spreadsheet') {
       openApp('gsheets', { fileId: file.id, fileName: file.name, content: file.content });
-    } else if (file.type === '3d_model' || file.type === 'image') {
+    } else if (file.type === 'image') {
+      openApp('image_editor', { fileId: file.id, fileName: file.name, fileUrl: file.content || file.path });
+    } else if (file.type === 'video') {
+      openApp('video_player', { fileId: file.id, fileName: file.name, videoUrl: file.content || file.path });
+    } else if (file.type === '3d_model') {
       openApp('creative_studio', { assetName: file.name, fileId: file.id });
     } else if (file.type === 'code') {
       openApp('terminal', { command: `cat "${file.path}"` });

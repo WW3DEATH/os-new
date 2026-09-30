@@ -17,7 +17,10 @@ import {
   CheckSquare, 
   Settings,
   Calculator,
-  Sparkles
+  Sparkles,
+  Image as ImageIcon,
+  Video,
+  Film
 } from 'lucide-react';
 
 export interface AppCatalogItem {
@@ -173,5 +176,21 @@ export const APP_CATALOG: Record<AppId, AppCatalogItem> = {
     icon: <Folder className="w-6 h-6 text-white" />,
     gradient: 'from-neutral-500 to-neutral-600',
     category: 'System'
+  },
+  image_editor: {
+    appId: 'image_editor',
+    label: 'Photo Studio',
+    subtitle: 'Image viewer, filters, crop & creative editor',
+    icon: <ImageIcon className="w-6 h-6 text-white" />,
+    gradient: 'from-rose-500 via-pink-500 to-purple-600',
+    category: 'Media'
+  },
+  video_player: {
+    appId: 'video_player',
+    label: 'QuickTime Pro',
+    subtitle: 'Hardware video player, scrubber & frame stepper',
+    icon: <Video className="w-6 h-6 text-white" />,
+    gradient: 'from-indigo-600 via-blue-600 to-sky-500',
+    category: 'Media'
   }
 };

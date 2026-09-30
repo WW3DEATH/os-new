@@ -16,6 +16,8 @@ import { KeynoteApp } from '../apps/KeynoteApp';
 import { GmailApp } from '../apps/GmailApp';
 import { YouTubeApp } from '../apps/YouTubeApp';
 import { GeminiApp } from '../apps/GeminiApp';
+import { ImageEditorApp } from '../apps/ImageEditorApp';
+import { VideoPlayerApp } from '../apps/VideoPlayerApp';
 import { X, Minus, Maximize2 } from 'lucide-react';
 
 interface WindowFrameProps {
@@ -146,6 +148,22 @@ export const WindowFrame: React.FC<WindowFrameProps> = ({ window: win }) => {
         return <TasksApp />;
       case 'trash':
         return <FinderApp />;
+      case 'image_editor':
+        return (
+          <ImageEditorApp 
+            initialFileId={win.data?.fileId} 
+            initialFileName={win.data?.fileName} 
+            initialFileUrl={win.data?.fileUrl || win.data?.content} 
+          />
+        );
+      case 'video_player':
+        return (
+          <VideoPlayerApp 
+            initialFileId={win.data?.fileId} 
+            initialFileName={win.data?.fileName} 
+            initialVideoUrl={win.data?.videoUrl || win.data?.content} 
+          />
+        );
       default:
         return <div className="p-8 text-center opacity-60">App Content Loading...</div>;
     }

@@ -145,14 +145,51 @@ export const DEFAULT_FILES: FileItem[] = [
   },
   {
     id: 'file-2',
-    name: 'Cyberpunk_City_Normal_Map_4K.exr',
-    path: '/Creative Projects/Textures/Cyberpunk_City_Normal_Map_4K.exr',
+    name: 'Nebula_Deep_Space_Wallpaper_4K.jpg',
+    path: '/Creative Projects/Textures/Nebula_Deep_Space_Wallpaper_4K.jpg',
     type: 'image',
-    size: '84.2 MB',
+    size: '14.2 MB',
     updatedAt: 'Yesterday, 4:20 PM',
-    tags: ['textures'],
+    tags: ['image', 'wallpaper', 'textures'],
     isCloudSynced: true,
-    isOfflineAvailable: true
+    isOfflineAvailable: true,
+    content: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=2800&q=80'
+  },
+  {
+    id: 'file-cyber-photo',
+    name: 'Cyberpunk_Tokyo_Graded.jpg',
+    path: '/Pictures/Cyberpunk_Tokyo_Graded.jpg',
+    type: 'image',
+    size: '8.4 MB',
+    updatedAt: 'Today, 11:30 AM',
+    tags: ['image', 'photo', 'creative'],
+    isCloudSynced: true,
+    isOfflineAvailable: true,
+    content: 'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=2400&q=80'
+  },
+  {
+    id: 'file-video-demo',
+    name: 'Blender_OpenMovie_4K_Reel.mp4',
+    path: '/Movies/Blender_OpenMovie_4K_Reel.mp4',
+    type: 'video',
+    size: '42.8 MB',
+    updatedAt: 'Today, 09:15 AM',
+    tags: ['video', 'reel', '4k'],
+    isCloudSynced: true,
+    isOfflineAvailable: true,
+    content: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
+  },
+  {
+    id: 'file-video-scifi',
+    name: 'Tears_Of_Steel_SciFi_VFX.mp4',
+    path: '/Movies/Tears_Of_Steel_SciFi_VFX.mp4',
+    type: 'video',
+    size: '78.5 MB',
+    updatedAt: 'Yesterday, 6:00 PM',
+    tags: ['video', 'vfx', 'scifi'],
+    isCloudSynced: true,
+    isOfflineAvailable: true,
+    content: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4'
   },
   {
     id: 'file-3',
@@ -293,6 +330,9 @@ export const WALLPAPERS = [
 
 export const DEFAULT_DOCK_APPS: AppId[] = [
   'finder',
+  'image_editor',
+  'video_player',
+  'creative_studio',
   'safari',
   'gemini',
   'youtube',
@@ -301,7 +341,6 @@ export const DEFAULT_DOCK_APPS: AppId[] = [
   'gdocs',
   'gsheets',
   'keynote',
-  'creative_studio',
   'activity_monitor',
   'shortcuts',
   'terminal',
@@ -312,14 +351,15 @@ export const DEFAULT_DOCK_APPS: AppId[] = [
 
 export const DEFAULT_DESKTOP_APPS: AppId[] = [
   'finder',
+  'image_editor',
+  'video_player',
+  'creative_studio',
   'gemini',
   'gdrive',
   'gmail',
   'youtube',
-  'creative_studio',
   'gdocs',
   'gsheets',
-  'keynote',
   'terminal',
   'activity_monitor'
 ];
