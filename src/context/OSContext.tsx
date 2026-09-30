@@ -45,6 +45,7 @@ interface OSContextType {
   setLocked: (locked: boolean) => void;
   loginWithGoogle: () => Promise<void>;
   loginAsGuest: () => void;
+  loginWithWorkstationPass: (username: string, pass: string) => boolean;
   logout: () => Promise<void>;
   
   // Windows
@@ -340,6 +341,25 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     } catch {}
     sounds.playChime();
     notify('Workstation Unlocked', 'Welcome to NebulaOS Desktop Pro! Creator Studio mode active.', 'info');
+  }, [notify]);
+
+  const loginWithWorkstationPass = useCallback((username: string, pass: string): boolean => {
+    const cleanUser = username.trim() || 'Workstation Pro';
+    const profile: UserProfile = {
+      uid: `user-${cleanUser.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+      displayName: cleanUser,
+      email: `${cleanUser.toLowerCase().replace(/[^a-z0-9]/g, '')}@workstation.local`,
+      isGuest: false,
+    };
+    setUser(profile);
+    setLocked(false);
+    try {
+      localStorage.setItem('nebula_os_user', JSON.stringify(profile));
+      localStorage.setItem('nebula_workstation_pass', pass);
+    } catch {}
+    sounds.playChime();
+    notify('Workstation Unlocked', `Welcome back, ${profile.displayName}!`, 'info');
+    return true;
   }, [notify]);
 
   const logout = async () => {
@@ -842,6 +862,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         setLocked,
         loginWithGoogle,
         loginAsGuest,
+        loginWithWorkstationPass,
         logout,
         windows,
         activeWindowId,

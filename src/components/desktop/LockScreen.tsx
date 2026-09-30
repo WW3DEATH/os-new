@@ -16,12 +16,18 @@ import {
   Sparkles,
   Copy,
   Check,
-  ExternalLink
+  ExternalLink,
+  Key,
+  ArrowRight,
+  UserCheck
 } from 'lucide-react';
 import { sounds } from '../../utils/sound';
 
 export const LockScreen: React.FC = () => {
-  const { user, loginWithGoogle, loginAsGuest, settings } = useOS();
+  const { user, loginWithGoogle, loginAsGuest, loginWithWorkstationPass, settings } = useOS();
+  const [authMode, setAuthMode] = useState<'passcode' | 'google'>('passcode');
+  const [username, setUsername] = useState('M.N.M. Jaasim');
+  const [passcode, setPasscode] = useState('');
   const [currentTime, setCurrentTime] = useState('');
   const [currentDate, setCurrentDate] = useState('');
   const [isAuthenticating, setIsAuthenticating] = useState(false);
@@ -150,20 +156,124 @@ export const LockScreen: React.FC = () => {
               NebulaOS Workstation Login
             </h2>
             <p className="text-xs text-white/70 mt-1 leading-relaxed">
-              Google OAuth authentication is mandatory to unlock workstation &amp; connect your private Google Drive folder.
+              Choose your authentication method to unlock your workstation session.
             </p>
           </div>
 
-          {/* Google Drive Private Folder Notice Badge */}
-          <div className="p-3 rounded-2xl bg-white/5 border border-white/10 text-left space-y-1.5">
-            <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-400">
-              <FolderLock className="w-4 h-4 shrink-0" />
-              <span>Private Google Drive Folder: '{DEDICATED_DRIVE_FOLDER_NAME}'</span>
-            </div>
-            <p className="text-[11px] text-white/60 leading-relaxed pl-6">
-              All documents, spreadsheets, presentations, and uploaded files are saved strictly in your personal Google Drive folder using your OAuth Bearer token. Zero developer storage consumption.
-            </p>
+          {/* Mode Switcher: Workstation Passcode vs Google Cloud Sync */}
+          <div className="grid grid-cols-2 p-1 bg-black/40 rounded-2xl border border-white/10 text-xs">
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode('passcode');
+                setAuthError(null);
+              }}
+              className={`py-2 px-3 rounded-xl font-medium transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                authMode === 'passcode'
+                  ? 'bg-white/20 text-white shadow-md'
+                  : 'text-white/50 hover:text-white'
+              }`}
+            >
+              <Key className="w-3.5 h-3.5 text-sky-400" />
+              <span>Passcode / PIN</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode('google');
+                setAuthError(null);
+              }}
+              className={`py-2 px-3 rounded-xl font-medium transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                authMode === 'google'
+                  ? 'bg-white/20 text-white shadow-md'
+                  : 'text-white/50 hover:text-white'
+              }`}
+            >
+              <FolderLock className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Google Drive</span>
+            </button>
           </div>
+
+          {/* TAB 1: Workstation Passcode / PIN Login (Zero external domain restriction) */}
+          {authMode === 'passcode' && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                loginWithWorkstationPass(username, passcode);
+              }}
+              className="space-y-3 pt-1"
+            >
+              <div className="text-left space-y-1">
+                <label className="text-[11px] text-white/60 font-medium">User Profile</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-2.5 w-4 h-4 text-white/40" />
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="Enter your name"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white placeholder-white/30 focus:outline-none focus:border-sky-500/50"
+                  />
+                </div>
+              </div>
+
+              <div className="text-left space-y-1">
+                <label className="text-[11px] text-white/60 font-medium">Workstation Password / PIN</label>
+                <div className="relative">
+                  <Key className="absolute left-3 top-2.5 w-4 h-4 text-white/40" />
+                  <input
+                    type="password"
+                    value={passcode}
+                    onChange={(e) => setPasscode(e.target.value)}
+                    placeholder="Enter password (or leave blank to unlock)"
+                    className="w-full pl-9 pr-10 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white placeholder-white/30 focus:outline-none focus:border-sky-500/50"
+                  />
+                  <button
+                    type="submit"
+                    className="absolute right-1.5 top-1.5 p-1 rounded-lg bg-sky-500 hover:bg-sky-400 text-white transition-colors cursor-pointer"
+                    title="Unlock Workstation"
+                  >
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-[10px] text-emerald-400/90 pl-1 flex items-center gap-1 pt-0.5">
+                  <Check className="w-3 h-3" />
+                  <span>Zero domain setup • Works instantly on Vercel, Localhost & Cloud</span>
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center space-x-2 shadow-xl shadow-sky-950/40 active:scale-[0.98] transition-all cursor-pointer"
+              >
+                <Unlock className="w-4 h-4" />
+                <span>Unlock Workstation</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => loginAsGuest()}
+                className="w-full py-2.5 px-3 rounded-2xl bg-white/5 hover:bg-white/10 text-white/80 hover:text-white text-xs flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>Quick Studio Guest Mode</span>
+              </button>
+            </form>
+          )}
+
+          {/* TAB 2: Google Cloud & Drive Sync */}
+          {authMode === 'google' && (
+            <div className="space-y-4">
+              {/* Google Drive Private Folder Notice Badge */}
+              <div className="p-3 rounded-2xl bg-white/5 border border-white/10 text-left space-y-1.5">
+                <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-400">
+                  <FolderLock className="w-4 h-4 shrink-0" />
+                  <span>Private Google Drive Folder: '{DEDICATED_DRIVE_FOLDER_NAME}'</span>
+                </div>
+                <p className="text-[11px] text-white/60 leading-relaxed pl-6">
+                  Syncs documents, spreadsheets, and files directly to your personal Google Drive folder using your OAuth Bearer token.
+                </p>
+              </div>
 
           {/* Real-time Guidance Banner when Signing In */}
           {isAuthenticating && (
@@ -308,7 +418,9 @@ export const LockScreen: React.FC = () => {
             )}
           </div>
         </div>
+        )}
       </div>
+    </div>
 
       {/* Footer System Controls */}
       <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-2 text-white/60 text-xs px-2 sm:px-6 shrink-0">
